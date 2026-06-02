@@ -8,6 +8,7 @@
 4. Expand the source tree to browse tables and variables.
 5. Use the dotted-name tree to drill into nested variable groups.
 6. Select a non-time variable to add it to the active plot tab.
+7. Select an existing series first if you want the source browser to rebind that series instead of adding a new one.
 
 ## Compare Sources
 
@@ -16,6 +17,7 @@
 3. Inspect both series together in one plot.
 4. Add additional series as needed to compare multiple runs or databases.
 5. Use `New window` and `New tab` to create separate analysis contexts when needed.
+6. Use the active-series list in the plot tab to pick which series should be edited or rebound.
 
 ## Plot Data
 
@@ -26,7 +28,7 @@
 
 ## Create Derived Series
 
-1. Type an expression into the expression field.
+1. Type an expression into the tab-local expression field.
 2. Use series names such as `series("run1.speed") - series("run2.speed")`.
 3. Select `Add derived`.
 4. The derived series is added to the current plot tab.
@@ -42,6 +44,12 @@
 - Toggle `Live` to poll sources for changes.
 - The current implementation checks for file changes about once per second.
 - If a source changes, the app reloads the affected data and keeps the plot layout.
+
+## Large Data
+
+- Use `Point budget` to cap the number of plotted samples loaded per selected series.
+- `0` disables the explicit cap and leaves the loader unbounded.
+- The app keeps a cache of raw series bindings so rebinding and redraws avoid unnecessary reloads when the source file has not changed.
 
 ## Product Context
 

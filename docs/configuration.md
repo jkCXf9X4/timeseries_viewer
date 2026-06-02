@@ -8,12 +8,19 @@ The application currently has a small fixed configuration surface:
 - no command-line options
 - live polling enabled from the UI only
 - project state stored in JSON files
+- plot point budget stored with the workspace state
 
 ## Live Refresh
 
 - Polling interval is currently fixed at roughly one second.
 - File change detection is based on file metadata changes.
 - Source reloads happen when the watched file changes.
+
+## Data Budget
+
+- The `Point budget` control limits the number of samples loaded for each raw series binding.
+- A budget of `0` means no explicit downsampling cap.
+- The budget is persisted as part of the workspace so reopened projects behave the same way.
 
 ## Paths
 

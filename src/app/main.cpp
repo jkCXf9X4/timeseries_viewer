@@ -1,14 +1,11 @@
-#include <chrono>
-#include <algorithm>
 #include <array>
-#include <cctype>
-#include <filesystem>
+#include <chrono>
+#include <cstddef>
+#include <cstdio>
 #include <cstring>
-#include <map>
+#include <filesystem>
 #include <optional>
 #include <string>
-#include <set>
-#include <unordered_map>
 #include <vector>
 
 #define GLFW_INCLUDE_NONE
@@ -18,7 +15,7 @@
 #include <implot.h>
 #include <nfd.h>
 
-#include "timeseries_viewer/core.hpp"
+#include "timeseries_viewer/app_model.hpp"
 
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -27,94 +24,14 @@ namespace fs = std::filesystem;
 
 namespace {
 
-struct OpenSource {
-  tsv::SourceCatalog catalog;
-  std::string alias;
-  std::optional<fs::file_time_type> last_write_time;
-};
-
-struct AppState {
-  std::vector<OpenSource> sources;
-  tsv::WorkspaceConfig workspace;
-  std::unordered_map<std::string, tsv::SeriesData> series_cache;
-  std::unordered_map<std::string, std::string> series_errors;
-  std::array<char, 1024> expression_buffer{};
-  std::string status{"Ready"};
-  bool live_mode{false};
-  std::chrono::steady_clock::time_point last_poll{std::chrono::steady_clock::now()};
-  fs::path project_path;
-  int active_window{0};
-};
-
-std::string sanitize_identifier(std::string value) {
-  for (char& ch : value) {
-    const auto u = static_cast<unsigned char>(ch);
-    if (!std::isalnum(u) && ch != '_') {
-      ch = '_';
-    }
+bool input_text_string(const char* label, std::string& value, std::size_t buffer_size = 1024) {
+  std::vector<char> buffer(buffer_size, '\0');
+  std::snprintf(buffer.data(), buffer.size(), "%s", value.c_str());
+  if (ImGui::InputText(label, buffer.data(), buffer.size())) {
+    value = buffer.data();
+    return true;
   }
-  while (value.find("__") != std::string::npos) {
-    value.erase(value.find("__"), 1);
-  }
-  if (value.empty()) {
-    value = "source";
-  }
-  return value;
-}
-
-std::string unique_alias(const std::vector<OpenSource>& sources, const std::string& preferred) {
-  const auto base = sanitize_identifier(preferred);
-  std::string alias = base;
-  int suffix = 2;
-  const auto exists = [&](const std::string& candidate) {
-    return std::any_of(sources.begin(), sources.end(), [&](const OpenSource& src) {
-      return src.alias == candidate;
-    });
-  };
-  while (exists(alias)) {
-    alias = base + "_" + std::to_string(suffix++);
-  }
-  return alias;
-}
-
-void ensure_workspace_defaults(AppState& app) {
-  if (app.workspace.windows.empty()) {
-    tsv::AnalysisWindowConfig window;
-    window.title = "Window 1";
-    window.tabs.push_back(tsv::PlotTabConfig{});
-    app.workspace.windows.push_back(std::move(window));
-  }
-  for (std::size_t index = 0; index < app.workspace.windows.size(); ++index) {
-    auto& window = app.workspace.windows[index];
-    if (window.title.empty()) {
-      window.title = "Window " + std::to_string(index + 1);
-    }
-    if (window.tabs.empty()) {
-      window.tabs.push_back(tsv::PlotTabConfig{});
-    }
-    if (window.active_tab >= window.tabs.size()) {
-      window.active_tab = 0;
-    }
-    for (std::size_t tab_index = 0; tab_index < window.tabs.size(); ++tab_index) {
-      auto& tab = window.tabs[tab_index];
-      if (tab.title.empty()) {
-        tab.title = "Plot " + std::to_string(tab_index + 1);
-      }
-    }
-  }
-  if (app.active_window < 0 || app.active_window >= static_cast<int>(app.workspace.windows.size())) {
-    app.active_window = 0;
-  }
-}
-
-tsv::PlotTabConfig& active_tab(AppState& app) {
-  ensure_workspace_defaults(app);
-  auto& window = app.workspace.windows.at(static_cast<std::size_t>(app.active_window));
-  return window.tabs.at(window.active_tab);
-}
-
-const tsv::PlotTabConfig& active_tab(const AppState& app) {
-  return app.workspace.windows.at(static_cast<std::size_t>(app.active_window)).tabs.at(app.workspace.windows.at(static_cast<std::size_t>(app.active_window)).active_tab);
+  return false;
 }
 
 std::optional<fs::path> open_dialog() {
@@ -159,420 +76,254 @@ std::optional<fs::path> open_project_dialog() {
   return path;
 }
 
-std::optional<fs::file_time_type> file_timestamp(const fs::path& path) {
-  std::error_code ec;
-  const auto stamp = fs::last_write_time(path, ec);
-  if (ec) {
-    return std::nullopt;
+const tsv::app::OpenSource* source_by_index(const tsv::app::AppState& app, std::size_t index) {
+  if (index >= app.sources.size()) {
+    return nullptr;
   }
-  return stamp;
+  return &app.sources[index];
 }
 
-std::optional<tsv::TableCatalog> find_table(const tsv::SourceCatalog& catalog, const std::optional<std::string>& table_name) {
-  if (catalog.tables.empty()) {
-    return std::nullopt;
-  }
-  if (!table_name.has_value()) {
-    return catalog.tables.front();
-  }
-  for (const auto& table : catalog.tables) {
-    if (table.name == *table_name) {
-      return table;
+void render_series_editor(tsv::app::AppState& app, std::size_t window_index, std::size_t tab_index) {
+  auto& tab = app.workspace.windows.at(window_index).tabs.at(tab_index);
+
+  ImGui::SeparatorText("Plot Settings");
+  input_text_string("Tab title", tab.title);
+  ImGui::Checkbox("Autoscale X", &tab.autoscale_x);
+  ImGui::SameLine();
+  ImGui::Checkbox("Autoscale Y", &tab.autoscale_y);
+
+  if (!tab.autoscale_x) {
+    double range[2] = {0.0, 1.0};
+    if (tab.x_range.has_value()) {
+      range[0] = tab.x_range->at(0);
+      range[1] = tab.x_range->at(1);
+    }
+    if (ImGui::InputScalarN("X range", ImGuiDataType_Double, range, 2)) {
+      tab.x_range = std::array<double, 2>{range[0], range[1]};
     }
   }
-  return std::nullopt;
-}
-
-std::string default_time_column(const tsv::TableCatalog& table) {
-  if (const auto inferred = tsv::infer_time_column(table.columns); inferred.has_value()) {
-    return *inferred;
-  }
-  return {};
-}
-
-std::string make_series_name(const OpenSource& source, const std::optional<std::string>& table_name, const std::string& value_column) {
-  if (table_name.has_value()) {
-    return source.alias + "." + *table_name + "." + value_column;
-  }
-  return source.alias + "." + value_column;
-}
-
-const OpenSource* find_source_by_path(const AppState& app, const std::filesystem::path& path) {
-  const auto it = std::find_if(app.sources.begin(), app.sources.end(), [&](const OpenSource& source) {
-    return source.catalog.path == path;
-  });
-  return it == app.sources.end() ? nullptr : &*it;
-}
-
-const OpenSource* find_source_by_alias(const AppState& app, const std::string& alias) {
-  const auto it = std::find_if(app.sources.begin(), app.sources.end(), [&](const OpenSource& source) {
-    return source.alias == alias;
-  });
-  return it == app.sources.end() ? nullptr : &*it;
-}
-
-std::optional<tsv::SeriesData> load_raw_series(
-  const OpenSource& source,
-  const std::optional<std::string>& table_name,
-  const std::optional<std::string>& time_column_override,
-  const std::string& value_column,
-  std::string& error,
-  std::string& time_column_out
-) {
-  const auto table = find_table(source.catalog, table_name);
-  if (!table.has_value()) {
-    error = "Table not found";
-    return std::nullopt;
+  if (!tab.autoscale_y) {
+    double range[2] = {0.0, 1.0};
+    if (tab.y_range.has_value()) {
+      range[0] = tab.y_range->at(0);
+      range[1] = tab.y_range->at(1);
+    }
+    if (ImGui::InputScalarN("Y range", ImGuiDataType_Double, range, 2)) {
+      tab.y_range = std::array<double, 2>{range[0], range[1]};
+    }
   }
 
-  tsv::SeriesRequest request;
-  request.table_name = table_name;
-  request.time_column = time_column_override.value_or(default_time_column(*table));
-  request.value_column = value_column;
-  time_column_out = request.time_column;
+  ImGui::SeparatorText("Series");
+  if (ImGui::BeginTable("series_table", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
+    ImGui::TableSetupColumn("Name");
+    ImGui::TableSetupColumn("Visible");
+    ImGui::TableSetupColumn("Color");
+    ImGui::TableSetupColumn("Remove");
+    ImGui::TableHeadersRow();
 
-  tsv::LoadOutcome outcome;
-  if (source.catalog.kind == tsv::SourceKind::Csv) {
-    outcome = tsv::load_csv_series(source.catalog.path, request);
-  } else {
-    outcome = tsv::load_sqlite_series(source.catalog.path, table->name, request);
-  }
-
-  if (!outcome.ok) {
-    error = outcome.error;
-    return std::nullopt;
-  }
-  outcome.series.name = make_series_name(source, table_name, value_column);
-  return outcome.series;
-}
-
-void open_source(AppState& app, const fs::path& path, const std::optional<std::string>& alias_override, const std::optional<tsv::SourceKind>& kind_override);
-
-void open_source(AppState& app, const fs::path& path) {
-  open_source(app, path, std::nullopt, std::nullopt);
-}
-
-void open_source(AppState& app, const fs::path& path, const std::optional<std::string>& alias_override, const std::optional<tsv::SourceKind>& kind_override) {
-  try {
-    OpenSource source;
-    const auto kind = kind_override.has_value()
-      ? *kind_override
-      : (path.extension() == ".csv" ? tsv::SourceKind::Csv : tsv::SourceKind::Sqlite);
-    source.catalog = kind == tsv::SourceKind::Csv ? tsv::load_csv_catalog(path) : tsv::load_sqlite_catalog(path);
-    source.alias = alias_override.has_value() ? *alias_override : unique_alias(app.sources, path.stem().string());
-    source.catalog.source_name = source.alias;
-    source.last_write_time = file_timestamp(path);
-    app.sources.push_back(std::move(source));
-    app.status = "Opened " + path.filename().string();
-  } catch (const std::exception& ex) {
-    app.status = ex.what();
-  }
-}
-
-void rebuild_cache(AppState& app) {
-  ensure_workspace_defaults(app);
-  app.series_cache.clear();
-  app.series_errors.clear();
-
-  tsv::SeriesRegistry registry;
-
-  for (auto& window : app.workspace.windows) {
-    for (auto& tab : window.tabs) {
-      for (auto& series_cfg : tab.series) {
-        if (series_cfg.derived) {
-          continue;
-        }
-
-        const auto source_path = series_cfg.source_path.has_value() ? fs::path(*series_cfg.source_path) : fs::path{};
-        const OpenSource* source = nullptr;
-        if (!source_path.empty()) {
-          source = find_source_by_path(app, source_path);
-        }
-        if (source == nullptr && series_cfg.source_alias.has_value()) {
-          source = find_source_by_alias(app, *series_cfg.source_alias);
-        }
-        if (source == nullptr) {
-          app.series_errors[series_cfg.name] = "Source missing";
-          continue;
-        }
-        if (series_cfg.value_column.has_value() == false) {
-          app.series_errors[series_cfg.name] = "Value column missing";
-          continue;
-        }
-
-        std::string error;
-        std::string time_column;
-        const auto series = load_raw_series(
-          *source,
-          series_cfg.table_name,
-          series_cfg.time_column,
-          *series_cfg.value_column,
-          error,
-          time_column
-        );
-        if (!series.has_value()) {
-          app.series_errors[series_cfg.name] = error;
-          continue;
-        }
-
-        if (series_cfg.name.empty()) {
-          series_cfg.name = series->name;
-        }
-        if (!series_cfg.source_alias.has_value()) {
-          series_cfg.source_alias = source->alias;
-        }
-        if (!series_cfg.source_path.has_value()) {
-          series_cfg.source_path = source->catalog.path.string();
-        }
-        if (!series_cfg.time_column.has_value()) {
-          series_cfg.time_column = time_column;
-        }
-
-        auto loaded = *series;
-        loaded.name = series_cfg.name;
-        loaded.source_name = source->alias;
-        app.series_cache[loaded.name] = loaded;
-        registry.set(loaded);
+    for (std::size_t i = 0; i < tab.series.size(); ++i) {
+      auto& series = tab.series[i];
+      ImGui::PushID(static_cast<int>(i));
+      ImGui::TableNextRow();
+      ImGui::TableSetColumnIndex(0);
+      const bool selected = tab.active_series_index == i;
+      if (ImGui::Selectable(series.name.c_str(), selected)) {
+        tsv::app::select_series(app, window_index, tab_index, i);
       }
-    }
-  }
-
-  for (auto& window : app.workspace.windows) {
-    for (auto& tab : window.tabs) {
-      for (auto& series_cfg : tab.series) {
-        if (!series_cfg.derived) {
-          continue;
-        }
-
-        if (series_cfg.name.empty()) {
-          series_cfg.name = series_cfg.expression.empty() ? "derived" : series_cfg.expression;
-        }
-
-        try {
-          auto series = tsv::evaluate_expression(series_cfg.expression, registry);
-          series.name = series_cfg.name;
-          app.series_cache[series.name] = std::move(series);
-          registry.set(app.series_cache.at(series_cfg.name));
-        } catch (const std::exception& ex) {
-          app.series_errors[series_cfg.name] = ex.what();
+      ImGui::TableSetColumnIndex(1);
+      ImGui::Checkbox("##visible", &series.visible);
+      ImGui::TableSetColumnIndex(2);
+      float color[4] = {
+        static_cast<float>(series.color[0]),
+        static_cast<float>(series.color[1]),
+        static_cast<float>(series.color[2]),
+        static_cast<float>(series.color[3])
+      };
+      if (ImGui::ColorEdit4("##color", color, ImGuiColorEditFlags_NoInputs)) {
+        for (std::size_t j = 0; j < 4; ++j) {
+          series.color[j] = color[j];
         }
       }
+      ImGui::TableSetColumnIndex(3);
+      if (ImGui::SmallButton("X")) {
+        tsv::app::remove_series(app, window_index, tab_index, i);
+        ImGui::PopID();
+        break;
+      }
+      ImGui::PopID();
     }
-  }
-}
-
-void add_raw_series(AppState& app, const OpenSource& source, const std::optional<std::string>& table_name, const std::string& value_column) {
-  tsv::PlotSeriesConfig series_cfg;
-  series_cfg.source_alias = source.alias;
-  series_cfg.source_path = source.catalog.path.string();
-  series_cfg.table_name = table_name;
-  series_cfg.value_column = value_column;
-
-  std::string error;
-  std::string time_column;
-  const auto preview = load_raw_series(source, table_name, std::nullopt, value_column, error, time_column);
-  if (!preview.has_value()) {
-    app.status = error;
-    return;
+    ImGui::EndTable();
   }
 
-  series_cfg.name = preview->name;
-  series_cfg.time_column = time_column;
+  if (tab.active_series_index < tab.series.size()) {
+    auto& series = tab.series[tab.active_series_index];
+    ImGui::SeparatorText("Selected Series");
+    input_text_string("Series name", series.name);
+    ImGui::Checkbox("Visible##selected", &series.visible);
 
-  active_tab(app).series.push_back(std::move(series_cfg));
-  app.status = "Added " + preview->name;
-  rebuild_cache(app);
-}
-
-void add_derived_series(AppState& app) {
-  const std::string expression(app.expression_buffer.data());
-  if (expression.empty()) {
-    app.status = "Expression is empty";
-    return;
-  }
-
-  tsv::SeriesRegistry registry;
-  for (const auto& [name, series] : app.series_cache) {
-    registry.set(series);
-  }
-
-  try {
-    auto series = tsv::evaluate_expression(expression, registry);
-    auto& tab = active_tab(app);
-    tsv::PlotSeriesConfig series_cfg;
-    series_cfg.name = series.name;
-    series_cfg.expression = expression;
-    series_cfg.derived = true;
-    tab.series.push_back(std::move(series_cfg));
-    app.series_cache[series.name] = std::move(series);
-    app.status = "Added derived series";
-    rebuild_cache(app);
-  } catch (const std::exception& ex) {
-    app.status = ex.what();
-  }
-}
-
-void save_project_file(AppState& app, const fs::path& path) {
-  tsv::ProjectState project;
-  std::map<std::string, tsv::ProjectSource> entries;
-  for (const auto& source : app.sources) {
-    tsv::ProjectSource entry;
-    entry.kind = source.catalog.kind;
-    entry.path = source.catalog.path.string();
-    entry.alias = source.alias;
-    entries.emplace(entry.path, std::move(entry));
-  }
-
-  for (const auto& window : app.workspace.windows) {
-    for (const auto& tab : window.tabs) {
-      for (const auto& series : tab.series) {
-        if (series.derived) {
-          continue;
-        }
-        if (!series.source_path.has_value()) {
-          continue;
-        }
-        auto& entry = entries[*series.source_path];
-        entry.selected_variables.push_back(series.name);
-        if (!entry.table_name.has_value() && series.table_name.has_value()) {
-          entry.table_name = series.table_name;
-        }
-        if (!entry.time_column.has_value() && series.time_column.has_value()) {
-          entry.time_column = series.time_column;
-        }
+    float color[4] = {
+      static_cast<float>(series.color[0]),
+      static_cast<float>(series.color[1]),
+      static_cast<float>(series.color[2]),
+      static_cast<float>(series.color[3])
+    };
+    if (ImGui::ColorEdit4("Series color", color, ImGuiColorEditFlags_NoInputs)) {
+      for (std::size_t j = 0; j < 4; ++j) {
+        series.color[j] = color[j];
       }
     }
-  }
 
-  for (auto& [_, entry] : entries) {
-    std::sort(entry.selected_variables.begin(), entry.selected_variables.end());
-    entry.selected_variables.erase(std::unique(entry.selected_variables.begin(), entry.selected_variables.end()), entry.selected_variables.end());
-    project.sources.push_back(std::move(entry));
-  }
-
-  project.workspace = app.workspace;
-  tsv::save_project(path, project);
-  app.project_path = path;
-  app.status = "Saved project";
-}
-
-void load_project_file(AppState& app, const fs::path& path) {
-  try {
-    const auto project = tsv::load_project(path);
-    app.sources.clear();
-    app.series_cache.clear();
-    app.series_errors.clear();
-    app.workspace = project.workspace;
-
-    for (const auto& source : project.sources) {
-      const auto source_path = fs::path(source.path);
-      open_source(app, source_path, source.alias.empty() ? std::optional<std::string>{} : std::optional<std::string>{source.alias}, source.kind);
+    if (series.derived) {
+      input_text_string("Expression", series.expression);
+      if (ImGui::Button("Update derived")) {
+        tsv::app::rebuild_cache(app);
+      }
+    } else {
+      ImGui::Text("Source: %s", series.source_alias.value_or(std::string{"?"}).c_str());
+      ImGui::Text("Binding: %s%s%s",
+        series.table_name.has_value() ? series.table_name->c_str() : "",
+        series.table_name.has_value() ? "." : "",
+        series.value_column.has_value() ? series.value_column->c_str() : ""
+      );
+      if (series.time_column.has_value()) {
+        ImGui::Text("Time: %s", series.time_column->c_str());
+      }
     }
-    app.project_path = path;
-    app.status = "Loaded project";
-    ensure_workspace_defaults(app);
-    rebuild_cache(app);
-  } catch (const std::exception& ex) {
-    app.status = ex.what();
-  }
-}
 
-void poll_live_reload(AppState& app) {
-  if (!app.live_mode) {
-    return;
-  }
-  const auto now = std::chrono::steady_clock::now();
-  if (now - app.last_poll < std::chrono::seconds(1)) {
-    return;
-  }
-  app.last_poll = now;
-
-  bool changed = false;
-  for (auto& source : app.sources) {
-    const auto current = file_timestamp(source.catalog.path);
-    if (current.has_value() && source.last_write_time.has_value() && *current != *source.last_write_time) {
-      source.last_write_time = current;
-      changed = true;
+    if (ImGui::Button("Remove selected")) {
+      tsv::app::remove_series(app, window_index, tab_index, tab.active_series_index);
     }
   }
-  if (changed) {
-    rebuild_cache(app);
-    app.status = "Live data refreshed";
+
+  ImGui::SeparatorText("Derived Series");
+  input_text_string("Expression draft", tab.expression_draft);
+  if (ImGui::Button("Add derived")) {
+    tsv::app::add_derived_series_to_tab(app, window_index, tab_index);
   }
 }
 
-void render_parameter_panel(AppState& app) {
-  ensure_workspace_defaults(app);
+void render_parameter_panel(tsv::app::AppState& app) {
+  tsv::app::ensure_workspace_defaults(app);
   ImGui::Begin("Parameters");
+
   if (ImGui::Button("Open")) {
     if (const auto path = open_dialog(); path.has_value()) {
-      open_source(app, *path);
-      rebuild_cache(app);
+      tsv::app::open_source(app, *path);
+      tsv::app::rebuild_cache(app);
     }
   }
   ImGui::SameLine();
   if (ImGui::Button("Reload")) {
-    rebuild_cache(app);
+    tsv::app::rebuild_cache(app);
   }
   ImGui::SameLine();
   ImGui::Checkbox("Live", &app.live_mode);
-  if (ImGui::Button("New window")) {
-    tsv::AnalysisWindowConfig window;
-    window.title = "Window " + std::to_string(app.workspace.windows.size() + 1);
-    window.tabs.push_back(tsv::PlotTabConfig{});
-    app.workspace.windows.push_back(std::move(window));
-    app.active_window = static_cast<int>(app.workspace.windows.size()) - 1;
-  }
-  ImGui::SameLine();
-  if (ImGui::Button("New tab")) {
-    auto& window = app.workspace.windows.at(static_cast<std::size_t>(app.active_window));
-    window.tabs.push_back(tsv::PlotTabConfig{});
-    window.active_tab = window.tabs.size() - 1;
-    window.tabs.back().title = "Plot " + std::to_string(window.tabs.size());
-  }
 
   if (ImGui::Button("Open project")) {
     if (const auto path = open_project_dialog(); path.has_value()) {
-      load_project_file(app, *path);
+      tsv::app::load_project_file(app, *path);
     }
   }
   ImGui::SameLine();
   if (ImGui::Button("Save project")) {
     if (const auto path = save_dialog(); path.has_value()) {
-      save_project_file(app, *path);
+      tsv::app::save_project_file(app, *path);
     }
   }
 
-  ImGui::Separator();
-  const auto& window = app.workspace.windows.at(static_cast<std::size_t>(app.active_window));
-  ImGui::Text("Target window: %s", window.title.c_str());
-  ImGui::Text("Target tab: %s", window.tabs.at(window.active_tab).title.c_str());
-  ImGui::InputText("Expression", app.expression_buffer.data(), app.expression_buffer.size());
   ImGui::SameLine();
-  if (ImGui::Button("Add derived")) {
-    add_derived_series(app);
+  if (ImGui::Button("New window")) {
+    tsv::app::add_window(app);
   }
-  ImGui::Separator();
+
+  ImGui::SameLine();
+  if (ImGui::Button("New tab")) {
+    tsv::app::add_tab(app, static_cast<std::size_t>(app.active_window));
+  }
+
+  ImGui::SeparatorText("Workspace");
+  if (ImGui::BeginCombo("Active window", app.workspace.windows.at(static_cast<std::size_t>(app.active_window)).title.c_str())) {
+    for (std::size_t i = 0; i < app.workspace.windows.size(); ++i) {
+      const bool selected = static_cast<int>(i) == app.active_window;
+      if (ImGui::Selectable(app.workspace.windows[i].title.c_str(), selected)) {
+        app.active_window = static_cast<int>(i);
+      }
+      if (selected) {
+        ImGui::SetItemDefaultFocus();
+      }
+    }
+    ImGui::EndCombo();
+  }
+
+  unsigned long long budget = static_cast<unsigned long long>(app.workspace.point_budget);
+  if (ImGui::InputScalar("Point budget", ImGuiDataType_U64, &budget)) {
+    app.workspace.point_budget = static_cast<std::size_t>(budget);
+    tsv::app::rebuild_cache(app);
+  }
+  ImGui::TextDisabled("0 means no explicit downsampling limit");
+
+  auto& window = tsv::app::active_window(app);
+  auto& tab = tsv::app::active_tab(app);
+  ImGui::SeparatorText("Active Target");
+  ImGui::Text("Window: %s", window.title.c_str());
+  ImGui::Text("Tab: %s", tab.title.c_str());
+  if (tab.active_series_index < tab.series.size()) {
+    ImGui::Text("Series: %s", tab.series[tab.active_series_index].name.c_str());
+  } else {
+    ImGui::TextDisabled("Series: none");
+  }
+
+  ImGui::SeparatorText("Parameter Browser");
+  if (app.sources.empty()) {
+    ImGui::TextDisabled("Open a CSV file or SQLite database to browse parameters.");
+  }
 
   for (const auto& source : app.sources) {
     if (ImGui::TreeNode(source.alias.c_str())) {
       ImGui::TextDisabled("%s", source.catalog.path.string().c_str());
       for (const auto& table : source.catalog.tables) {
-        const bool has_nested_table = source.catalog.kind == tsv::SourceKind::Sqlite || source.catalog.tables.size() > 1;
-        if (has_nested_table) {
-          if (ImGui::TreeNode(table.name.c_str())) {
+        const bool nested = source.catalog.kind == tsv::SourceKind::Sqlite || source.catalog.tables.size() > 1;
+        const auto table_label = nested ? table.name.c_str() : "";
+        if (nested) {
+          if (ImGui::TreeNode(table_label)) {
             for (const auto& column : table.columns) {
-              if (!column.time_candidate && ImGui::Selectable(column.name.c_str())) {
-                add_raw_series(app, source, source.catalog.kind == tsv::SourceKind::Sqlite ? std::optional<std::string>{table.name} : std::nullopt, column.name);
+              if (column.time_candidate) {
+                continue;
               }
+              const auto selected_series_index = tab.active_series_index;
+              const bool can_bind = selected_series_index < tab.series.size() && !tab.series[selected_series_index].derived;
+              ImGui::PushID(column.name.c_str());
+              if (ImGui::Selectable(column.name.c_str())) {
+                tsv::app::add_raw_series(app, source, table.name, column.name);
+              }
+              if (can_bind) {
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Bind selected")) {
+                  tsv::app::bind_series_to_source(app, static_cast<std::size_t>(app.active_window), window.active_tab, selected_series_index, source, table.name, column.name);
+                }
+              }
+              ImGui::PopID();
             }
             ImGui::TreePop();
           }
         } else {
           for (const auto& column : table.columns) {
-            if (!column.time_candidate && ImGui::Selectable(column.name.c_str())) {
-              add_raw_series(app, source, std::nullopt, column.name);
+            if (column.time_candidate) {
+              continue;
             }
+            const auto selected_series_index = tab.active_series_index;
+            const bool can_bind = selected_series_index < tab.series.size() && !tab.series[selected_series_index].derived;
+            ImGui::PushID(column.name.c_str());
+            if (ImGui::Selectable(column.name.c_str())) {
+              tsv::app::add_raw_series(app, source, std::nullopt, column.name);
+            }
+            if (can_bind) {
+              ImGui::SameLine();
+              if (ImGui::SmallButton("Bind selected")) {
+                tsv::app::bind_series_to_source(app, static_cast<std::size_t>(app.active_window), window.active_tab, selected_series_index, source, std::nullopt, column.name);
+              }
+            }
+            ImGui::PopID();
           }
         }
       }
@@ -581,8 +332,7 @@ void render_parameter_panel(AppState& app) {
   }
 
   if (!app.series_errors.empty()) {
-    ImGui::Separator();
-    ImGui::TextUnformatted("Series errors");
+    ImGui::SeparatorText("Series Errors");
     for (const auto& [name, error] : app.series_errors) {
       ImGui::BulletText("%s: %s", name.c_str(), error.c_str());
     }
@@ -592,15 +342,13 @@ void render_parameter_panel(AppState& app) {
   ImGui::End();
 }
 
-void render_analysis_windows(AppState& app) {
-  ensure_workspace_defaults(app);
+void render_analysis_windows(tsv::app::AppState& app) {
+  tsv::app::ensure_workspace_defaults(app);
   for (std::size_t window_index = 0; window_index < app.workspace.windows.size(); ++window_index) {
     auto& window = app.workspace.windows[window_index];
     if (ImGui::Begin(window.title.c_str())) {
       if (ImGui::Button("New tab")) {
-        window.tabs.push_back(tsv::PlotTabConfig{});
-        window.tabs.back().title = "Plot " + std::to_string(window.tabs.size());
-        window.active_tab = window.tabs.size() - 1;
+        tsv::app::add_tab(app, window_index);
       }
       ImGui::SameLine();
       ImGui::TextDisabled("Window %zu", window_index + 1);
@@ -613,7 +361,22 @@ void render_analysis_windows(AppState& app) {
             window.active_tab = tab_index;
             app.active_window = static_cast<int>(window_index);
 
+            render_series_editor(app, window_index, tab_index);
+            ImGui::SeparatorText("Plot");
+
             if (ImPlot::BeginPlot(("plot##" + std::to_string(window_index) + "_" + std::to_string(tab_index)).c_str(), ImVec2(-1, 360))) {
+              if (tab.autoscale_x && tab.autoscale_y) {
+                ImPlot::SetupAxes("time", "value", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
+              } else {
+                ImPlot::SetupAxes("time", "value", tab.autoscale_x ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None, tab.autoscale_y ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None);
+                if (!tab.autoscale_x && tab.x_range.has_value()) {
+                  ImPlot::SetupAxisLimits(ImAxis_X1, tab.x_range->at(0), tab.x_range->at(1), ImGuiCond_Always);
+                }
+                if (!tab.autoscale_y && tab.y_range.has_value()) {
+                  ImPlot::SetupAxisLimits(ImAxis_Y1, tab.y_range->at(0), tab.y_range->at(1), ImGuiCond_Always);
+                }
+              }
+
               for (const auto& series_cfg : tab.series) {
                 const auto it = app.series_cache.find(series_cfg.name);
                 if (it == app.series_cache.end()) {
@@ -625,28 +388,6 @@ void render_analysis_windows(AppState& app) {
                 }
               }
               ImPlot::EndPlot();
-            }
-
-            ImGui::Separator();
-            for (const auto& series_cfg : tab.series) {
-              if (series_cfg.derived) {
-                ImGui::BulletText("%s = %s", series_cfg.name.c_str(), series_cfg.expression.c_str());
-              } else {
-                const auto source_label = series_cfg.source_alias.value_or(std::string{"?"});
-                const auto table_label = series_cfg.table_name.value_or(std::string{});
-                const auto value_label = series_cfg.value_column.value_or(std::string{});
-                if (table_label.empty()) {
-                  ImGui::BulletText("%s -> %s.%s", series_cfg.name.c_str(), source_label.c_str(), value_label.c_str());
-                } else {
-                  ImGui::BulletText("%s -> %s.%s.%s", series_cfg.name.c_str(), source_label.c_str(), table_label.c_str(), value_label.c_str());
-                }
-              }
-              const auto error_it = app.series_errors.find(series_cfg.name);
-              if (error_it != app.series_errors.end()) {
-                ImGui::Indent();
-                ImGui::TextColored(ImVec4(0.9f, 0.4f, 0.4f, 1.0f), "%s", error_it->second.c_str());
-                ImGui::Unindent();
-              }
             }
 
             ImGui::EndTabItem();
@@ -699,13 +440,13 @@ int main() {
   ImGui_ImplGlfw_InitForOpenGL(window, true);
   ImGui_ImplOpenGL3_Init("#version 330");
 
-  AppState app;
-  ensure_workspace_defaults(app);
-  std::snprintf(app.expression_buffer.data(), app.expression_buffer.size(), "%s", "series(\"source.variable\")");
+  tsv::app::AppState app;
+  tsv::app::ensure_workspace_defaults(app);
+  app.workspace.windows.front().tabs.front().expression_draft = "series(\"source.variable\")";
 
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
-    poll_live_reload(app);
+    tsv::app::poll_live_reload(app);
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();

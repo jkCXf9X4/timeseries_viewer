@@ -27,6 +27,12 @@ find_package(Lua REQUIRED)
 target_link_libraries(timeseries_core INTERFACE nlohmann_json::nlohmann_json SQLite::SQLite3 sol2::sol2 ${LUA_LIBRARIES})
 target_include_directories(timeseries_core INTERFACE ${LUA_INCLUDE_DIR})
 
+add_library(timeseries_app_model STATIC
+  src/app/app_model.cpp
+)
+target_link_libraries(timeseries_app_model PUBLIC timeseries_core)
+target_include_directories(timeseries_app_model PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 if(TSV_BUILD_APP)
   find_package(OpenGL REQUIRED)
   find_package(glad CONFIG REQUIRED)
@@ -43,7 +49,7 @@ if(TSV_BUILD_APP)
 
   target_include_directories(timeseries_viewer PRIVATE src/third_party/imgui/backends)
   target_link_libraries(timeseries_viewer PRIVATE
-    timeseries_core
+    timeseries_app_model
     glad::glad
     glfw
     imgui::imgui
@@ -61,11 +67,12 @@ if(TSV_BUILD_TESTS)
 
   add_executable(timeseries_viewer_tests
     tests/core_tests.cpp
+    tests/app_model_tests.cpp
   )
 
   target_compile_definitions(timeseries_viewer_tests PRIVATE TSV_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
   target_link_libraries(timeseries_viewer_tests PRIVATE
-    timeseries_core
+    timeseries_app_model
     Catch2::Catch2WithMain
   )
 

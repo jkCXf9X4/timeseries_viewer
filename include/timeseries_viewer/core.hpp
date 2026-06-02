@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cctype>
 #include <cstdio>
 #include <ctime>
@@ -73,6 +74,7 @@ struct SeriesRequest {
   std::optional<std::string> table_name;
   std::string time_column;
   std::string value_column;
+  std::optional<std::size_t> max_points;
 };
 
 struct LoadOutcome {
@@ -117,6 +119,8 @@ struct PlotTabConfig {
   bool autoscale_y{true};
   std::optional<std::array<double, 2>> x_range;
   std::optional<std::array<double, 2>> y_range;
+  std::size_t active_series_index{0};
+  std::string expression_draft;
 };
 
 using PlotViewConfig = PlotTabConfig;
@@ -129,6 +133,7 @@ struct AnalysisWindowConfig {
 
 struct WorkspaceConfig {
   std::vector<AnalysisWindowConfig> windows;
+  std::size_t point_budget{50000};
 };
 
 struct ProjectState {
@@ -504,6 +509,35 @@ inline std::vector<std::vector<std::string>> read_csv_rows(const std::filesystem
   return rows;
 }
 
+inline void downsample_series(SeriesData& series, std::size_t max_points) {
+  if (max_points == 0 || series.time.size() <= max_points) {
+    return;
+  }
+  if (max_points == 1) {
+    const auto first_time = series.time.front();
+    const auto first_value = series.value.front();
+    series.time = {first_time};
+    series.value = {first_value};
+    return;
+  }
+
+  std::vector<double> time;
+  std::vector<double> value;
+  time.reserve(max_points);
+  value.reserve(max_points);
+
+  const double last_index = static_cast<double>(series.time.size() - 1);
+  for (std::size_t i = 0; i < max_points; ++i) {
+    const auto sample_index = static_cast<std::size_t>(std::lround((last_index * static_cast<double>(i)) / static_cast<double>(max_points - 1)));
+    const auto clamped = std::min(sample_index, series.time.size() - 1);
+    time.push_back(series.time[clamped]);
+    value.push_back(series.value[clamped]);
+  }
+
+  series.time = std::move(time);
+  series.value = std::move(value);
+}
+
 inline LoadOutcome load_csv_series(const std::filesystem::path& path, const SeriesRequest& request) {
   const auto catalog = load_csv_catalog(path);
   const auto& table = catalog.tables.at(0);
@@ -542,6 +576,10 @@ inline LoadOutcome load_csv_series(const std::filesystem::path& path, const Seri
     }
     series.time.push_back(*time_value);
     series.value.push_back(numeric_value);
+  }
+
+  if (request.max_points.has_value()) {
+    downsample_series(series, *request.max_points);
   }
 
   return LoadOutcome{true, std::move(series), {}};
@@ -630,6 +668,10 @@ inline LoadOutcome load_sqlite_series(const std::filesystem::path& path, const s
     }
     series.time.push_back(*time_value);
     series.value.push_back(numeric_value);
+  }
+
+  if (request.max_points.has_value()) {
+    downsample_series(series, *request.max_points);
   }
 
   return LoadOutcome{true, std::move(series), {}};
@@ -984,7 +1026,9 @@ inline void to_json(nlohmann::json& j, const PlotTabConfig& view) {
     {"autoscale_x", view.autoscale_x},
     {"autoscale_y", view.autoscale_y},
     {"x_range", view.x_range},
-    {"y_range", view.y_range}
+    {"y_range", view.y_range},
+    {"active_series_index", view.active_series_index},
+    {"expression_draft", view.expression_draft}
   };
 }
 
@@ -1001,6 +1045,8 @@ inline void from_json(const nlohmann::json& j, PlotViewConfig& view) {
   if (j.contains("y_range") && !j.at("y_range").is_null()) {
     view.y_range = j.at("y_range").get<std::array<double, 2>>();
   }
+  view.active_series_index = j.value("active_series_index", std::size_t{0});
+  view.expression_draft = j.value("expression_draft", std::string{});
 }
 
 inline void to_json(nlohmann::json& j, const AnalysisWindowConfig& window) {
@@ -1021,7 +1067,8 @@ inline void from_json(const nlohmann::json& j, AnalysisWindowConfig& window) {
 
 inline void to_json(nlohmann::json& j, const WorkspaceConfig& workspace) {
   j = nlohmann::json{
-    {"windows", workspace.windows}
+    {"windows", workspace.windows},
+    {"point_budget", workspace.point_budget}
   };
 }
 
@@ -1029,6 +1076,7 @@ inline void from_json(const nlohmann::json& j, WorkspaceConfig& workspace) {
   if (j.contains("windows")) {
     workspace.windows = j.at("windows").get<std::vector<AnalysisWindowConfig>>();
   }
+  workspace.point_budget = j.value("point_budget", std::size_t{50000});
 }
 
 inline void to_json(nlohmann::json& j, const ProjectState& project) {
@@ -1122,7 +1170,9 @@ inline bool operator==(const PlotTabConfig& lhs, const PlotTabConfig& rhs) {
       && lhs.autoscale_x == rhs.autoscale_x
       && lhs.autoscale_y == rhs.autoscale_y
       && lhs.x_range == rhs.x_range
-      && lhs.y_range == rhs.y_range;
+      && lhs.y_range == rhs.y_range
+      && lhs.active_series_index == rhs.active_series_index
+      && lhs.expression_draft == rhs.expression_draft;
 }
 
 inline bool operator==(const AnalysisWindowConfig& lhs, const AnalysisWindowConfig& rhs) {
@@ -1132,7 +1182,8 @@ inline bool operator==(const AnalysisWindowConfig& lhs, const AnalysisWindowConf
 }
 
 inline bool operator==(const WorkspaceConfig& lhs, const WorkspaceConfig& rhs) {
-  return lhs.windows == rhs.windows;
+  return lhs.windows == rhs.windows
+      && lhs.point_budget == rhs.point_budget;
 }
 
 inline bool operator==(const ProjectState& lhs, const ProjectState& rhs) {
