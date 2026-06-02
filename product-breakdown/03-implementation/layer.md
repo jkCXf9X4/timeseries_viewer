@@ -7,6 +7,8 @@ The codebase should be organized around the same separation used in the architec
 ## Proposed Code Structure
 
 - `src/app/`: application startup, main loop, routing between UI panels
+- `src/app/windows/`: top-level window and tab ownership
+- `src/app/selection/`: parameter binding menu and source-to-parameter mapping
 - `src/ui/`: source browser, plot workspace, expression editor, project dialogs
 - `src/io/csv/`: CSV parsing and column inference
 - `src/io/sqlite/`: SQLite inspection and table/column import
@@ -19,6 +21,8 @@ The codebase should be organized around the same separation used in the architec
 
 - Source import should return normalized series metadata plus data vectors.
 - The variable registry should expose stable lookup by fully qualified name.
+- The selection layer should keep parameter-to-source bindings explicit and serializable.
+- The window/tab layer should own exactly one plot per tab and keep per-tab parameter state isolated.
 - The plot layer should consume ready-to-render series objects rather than raw files.
 - Expression evaluation should work through a narrow API that exposes named series and returns a derived series.
 - Persistence should round-trip the same model objects used by the UI.

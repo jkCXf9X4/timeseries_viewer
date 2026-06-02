@@ -6,7 +6,15 @@
 2. Use `Open` in the Sources panel.
 3. Select a CSV file or SQLite database.
 4. Expand the source tree to browse tables and variables.
-5. Select a non-time variable to add it to the active plot.
+5. Use the dotted-name tree to drill into nested variable groups.
+6. Select a non-time variable to add it to the active plot.
+
+## Compare Sources
+
+1. Open a second CSV file or SQLite database.
+2. Add a comparable variable from that source to the same plot view.
+3. Inspect both series together in one plot.
+4. Add additional series as needed to compare multiple runs or databases.
 
 ## Plot Data
 

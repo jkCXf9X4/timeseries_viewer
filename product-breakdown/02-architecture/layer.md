@@ -7,6 +7,8 @@ The architecture should separate concerns into source ingestion, normalized time
 ## Main Boundaries
 
 - UI shell and docking layout
+- Window manager and tabbed plot containers
+- Parameter binding and source-to-variable selection
 - Source adapters for CSV and SQLite
 - Canonical variable registry
 - Time-series cache and derived-series model
@@ -18,7 +20,15 @@ The architecture should separate concerns into source ingestion, normalized time
 
 ### UI Shell
 
-Provides the dockable workspace, source browser, plot tabs, expression editor, and project actions.
+Provides the multi-window workspace, source browser, parameter selection menu, plot tabs, expression editor, and project actions.
+
+### Window Manager
+
+Owns top-level windows, each window's tab set, and the one-plot-per-tab rule.
+
+### Parameter Binding Menu
+
+Presents available parameters grouped by open source and maintains the explicit mapping between displayed series and the file or database they come from.
 
 ### Source Adapters
 
@@ -30,7 +40,7 @@ Maps fully qualified names to source-local series objects and preserves dotted h
 
 ### Plot Workspace
 
-Owns overlays, axes, visibility, styling, and multiple tabs or views.
+Owns overlays, axes, visibility, styling, and one plot per tab. Each plot keeps its own parameter selection state.
 
 ### Expression Engine
 
@@ -49,10 +59,11 @@ Polls sources for changes and invalidates or reloads affected series when live m
 1. User opens one or more sources.
 2. Source adapters extract columns or tables and normalize them.
 3. The variable registry exposes selectable series in a tree.
-4. The user adds series or expressions to one or more plot views.
-5. The plot workspace renders raw and derived series together.
-6. The refresh scheduler reloads changed sources and updates dependent plots.
-7. Project persistence stores and restores the current state.
+4. The parameter binding menu maps displayed parameters to one or more open sources.
+5. The user adds series or expressions to one or more tabs across one or more windows.
+6. The plot workspace renders raw and derived series in the selected tab.
+7. The refresh scheduler reloads changed sources and updates dependent plots.
+8. Project persistence stores and restores the current state.
 
 ## Quality Attributes
 
@@ -69,9 +80,12 @@ Polls sources for changes and invalidates or reloads affected series when live m
 - PB-006: Use polling for live updates.
 - PB-007: Use embedded Lua with `sol2` bindings for expressions.
 - PB-008: Use interpolation onto the left-hand time grid for comparison and derived series.
+- PB-010: Parameter selection is explicit and bound to the open source or database that provides the series.
+- PB-011: The top-level analysis layout uses multiple simultaneous windows, each with multiple tabs, and each tab contains exactly one plot.
 
 ## Architecture Risks
 
 - In-memory loading may not scale to very large sources without later redesign.
 - Polling is simple but less immediate than file notifications.
 - Expression evaluation needs a controlled interface so results stay deterministic and explainable.
+- A multi-window layout adds state-management complexity that must stay isolated from the underlying series model.

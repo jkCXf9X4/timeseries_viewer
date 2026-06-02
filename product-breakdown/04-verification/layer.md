@@ -20,6 +20,8 @@ Verification must prove the product can open real files, select variables, rende
 
 - Open multiple sources in one session.
 - Select variables from nested names.
+- Select parameters through a menu or panel and verify the chosen source binding is reflected in the displayed plot.
+- Open multiple windows, create multiple tabs in a window, and verify each tab owns exactly one plot.
 - Overlay multiple raw series in one view.
 - Create a derived `a - b` series and verify alignment.
 - Save a project and restore it into the same workspace shape.
@@ -34,13 +36,17 @@ Verification must prove the product can open real files, select variables, rende
 
 - The app launches cleanly on Linux.
 - The user can browse multiple sources without a backend service.
+- The user can choose parameters through an explicit menu or panel rather than implicit hidden binding.
+- The user can keep multiple windows open simultaneously, with each tab showing one plot and its own selection state.
 - The user can create, compare, and save views without leaving the application.
 
 ## Acceptance Criteria
 
 - The source browser exposes CSV and SQLite content consistently.
+- The parameter-selection UI keeps file/database bindings explicit.
 - The same source state can be saved and restored from a project file.
 - A comparison plot can show multiple series together.
+- Each plot tab keeps an isolated parameter selection.
 - Derived expressions evaluate deterministically and render like normal series.
 - Live refresh updates visible data without corrupting the workspace.
 

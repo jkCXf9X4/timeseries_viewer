@@ -13,5 +13,7 @@ Root index of stable decisions recorded in the product breakdown.
 | PB-007 | 02-architecture | Derived series use embedded Lua with `sol2` bindings | Recorded |
 | PB-008 | 02-architecture | Cross-series comparison aligns to the left-hand time grid using interpolation | Recorded |
 | PB-009 | 01-product | Saved views are project JSON files that restore sources, plots, and expressions | Recorded |
+| PB-010 | 02-architecture | Parameter selection is explicit and bound to the open source or database that provides the series | Recorded |
+| PB-011 | 02-architecture | The top-level analysis layout uses multiple simultaneous windows, each with multiple tabs, and each tab contains exactly one plot | Recorded |
 
 Each decision is detailed in the layer where its consequences are most direct.

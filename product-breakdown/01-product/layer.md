@@ -28,15 +28,23 @@ The product should let a user open multiple time-series sources, browse their co
 
 - Open and inspect multiple source files in one session.
 - Find variables through a nested tree built from dotted names.
+- Use a menu or panel to choose which parameters are displayed and which open source provides them.
 - Select time axis and value columns where necessary.
+- View multiple analysis windows simultaneously, with multiple tabs per window and one plot per tab.
 - Overlay multiple series in a single plot.
 - Create derived series from expressions.
 - Persist workspace state and restore it later.
+
+## Use Cases
+
+See [use cases](use-cases.md) for the concrete user flows that the first implementation must support.
 
 ## Product Requirements
 
 - The source browser must make file and variable selection visual and explicit.
 - The app must support nested variable names that use `.` as a hierarchy separator.
+- The app must expose an explicit parameter-selection menu or panel that maps parameters to open files or databases.
+- The workspace must support multiple simultaneous windows, multiple tabs per window, and exactly one plot per tab.
 - Time selection must be understandable and overridable by the user.
 - Derived comparisons must be usable in the same plot workspace as raw series.
 - Saved views must restore the essential state of the analysis session.
