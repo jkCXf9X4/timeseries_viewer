@@ -91,6 +91,7 @@ struct TreeNode {
 struct ProjectSource {
   SourceKind kind{SourceKind::Csv};
   std::string path;
+  std::string alias;
   std::optional<std::string> table_name;
   std::optional<std::string> time_column;
   std::vector<std::string> selected_variables;
@@ -99,12 +100,17 @@ struct ProjectSource {
 struct PlotSeriesConfig {
   std::string name;
   std::string expression;
+  std::optional<std::string> source_alias;
+  std::optional<std::string> source_path;
+  std::optional<std::string> table_name;
+  std::optional<std::string> time_column;
+  std::optional<std::string> value_column;
   bool visible{true};
   bool derived{false};
   std::array<double, 4> color{1.0, 0.0, 0.0, 1.0};
 };
 
-struct PlotViewConfig {
+struct PlotTabConfig {
   std::string title;
   std::vector<PlotSeriesConfig> series;
   bool autoscale_x{true};
@@ -113,9 +119,21 @@ struct PlotViewConfig {
   std::optional<std::array<double, 2>> y_range;
 };
 
+using PlotViewConfig = PlotTabConfig;
+
+struct AnalysisWindowConfig {
+  std::string title;
+  std::vector<PlotTabConfig> tabs;
+  std::size_t active_tab{0};
+};
+
+struct WorkspaceConfig {
+  std::vector<AnalysisWindowConfig> windows;
+};
+
 struct ProjectState {
   std::vector<ProjectSource> sources;
-  std::vector<PlotViewConfig> views;
+  WorkspaceConfig workspace;
 };
 
 struct SeriesRegistry {
@@ -897,6 +915,7 @@ inline void to_json(nlohmann::json& j, const ProjectSource& source) {
   j = nlohmann::json{
     {"kind", to_string(source.kind)},
     {"path", source.path},
+    {"alias", source.alias},
     {"table_name", source.table_name},
     {"time_column", source.time_column},
     {"selected_variables", source.selected_variables}
@@ -906,6 +925,7 @@ inline void to_json(nlohmann::json& j, const ProjectSource& source) {
 inline void from_json(const nlohmann::json& j, ProjectSource& source) {
   source.kind = source_kind_from_string(j.at("kind").get<std::string>());
   source.path = j.at("path").get<std::string>();
+  source.alias = j.value("alias", std::string{});
   if (j.contains("table_name") && !j.at("table_name").is_null()) {
     source.table_name = j.at("table_name").get<std::string>();
   }
@@ -921,6 +941,11 @@ inline void to_json(nlohmann::json& j, const PlotSeriesConfig& series) {
   j = nlohmann::json{
     {"name", series.name},
     {"expression", series.expression},
+    {"source_alias", series.source_alias},
+    {"source_path", series.source_path},
+    {"table_name", series.table_name},
+    {"time_column", series.time_column},
+    {"value_column", series.value_column},
     {"visible", series.visible},
     {"derived", series.derived},
     {"color", series.color}
@@ -930,6 +955,21 @@ inline void to_json(nlohmann::json& j, const PlotSeriesConfig& series) {
 inline void from_json(const nlohmann::json& j, PlotSeriesConfig& series) {
   series.name = j.at("name").get<std::string>();
   series.expression = j.value("expression", std::string{});
+  if (j.contains("source_alias") && !j.at("source_alias").is_null()) {
+    series.source_alias = j.at("source_alias").get<std::string>();
+  }
+  if (j.contains("source_path") && !j.at("source_path").is_null()) {
+    series.source_path = j.at("source_path").get<std::string>();
+  }
+  if (j.contains("table_name") && !j.at("table_name").is_null()) {
+    series.table_name = j.at("table_name").get<std::string>();
+  }
+  if (j.contains("time_column") && !j.at("time_column").is_null()) {
+    series.time_column = j.at("time_column").get<std::string>();
+  }
+  if (j.contains("value_column") && !j.at("value_column").is_null()) {
+    series.value_column = j.at("value_column").get<std::string>();
+  }
   series.visible = j.value("visible", true);
   series.derived = j.value("derived", false);
   if (j.contains("color")) {
@@ -937,7 +977,7 @@ inline void from_json(const nlohmann::json& j, PlotSeriesConfig& series) {
   }
 }
 
-inline void to_json(nlohmann::json& j, const PlotViewConfig& view) {
+inline void to_json(nlohmann::json& j, const PlotTabConfig& view) {
   j = nlohmann::json{
     {"title", view.title},
     {"series", view.series},
@@ -963,10 +1003,38 @@ inline void from_json(const nlohmann::json& j, PlotViewConfig& view) {
   }
 }
 
+inline void to_json(nlohmann::json& j, const AnalysisWindowConfig& window) {
+  j = nlohmann::json{
+    {"title", window.title},
+    {"tabs", window.tabs},
+    {"active_tab", window.active_tab}
+  };
+}
+
+inline void from_json(const nlohmann::json& j, AnalysisWindowConfig& window) {
+  window.title = j.at("title").get<std::string>();
+  if (j.contains("tabs")) {
+    window.tabs = j.at("tabs").get<std::vector<PlotTabConfig>>();
+  }
+  window.active_tab = j.value("active_tab", std::size_t{0});
+}
+
+inline void to_json(nlohmann::json& j, const WorkspaceConfig& workspace) {
+  j = nlohmann::json{
+    {"windows", workspace.windows}
+  };
+}
+
+inline void from_json(const nlohmann::json& j, WorkspaceConfig& workspace) {
+  if (j.contains("windows")) {
+    workspace.windows = j.at("windows").get<std::vector<AnalysisWindowConfig>>();
+  }
+}
+
 inline void to_json(nlohmann::json& j, const ProjectState& project) {
   j = nlohmann::json{
     {"sources", project.sources},
-    {"views", project.views}
+    {"workspace", project.workspace}
   };
 }
 
@@ -974,8 +1042,13 @@ inline void from_json(const nlohmann::json& j, ProjectState& project) {
   if (j.contains("sources")) {
     project.sources = j.at("sources").get<std::vector<ProjectSource>>();
   }
-  if (j.contains("views")) {
-    project.views = j.at("views").get<std::vector<PlotViewConfig>>();
+  if (j.contains("workspace")) {
+    project.workspace = j.at("workspace").get<WorkspaceConfig>();
+  } else if (j.contains("views")) {
+    AnalysisWindowConfig window;
+    window.title = "Workspace";
+    window.tabs = j.at("views").get<std::vector<PlotTabConfig>>();
+    project.workspace.windows.push_back(std::move(window));
   }
 }
 
@@ -1024,6 +1097,7 @@ inline ProjectState load_project(const std::filesystem::path& file) {
 inline bool operator==(const ProjectSource& lhs, const ProjectSource& rhs) {
   return lhs.kind == rhs.kind
       && lhs.path == rhs.path
+      && lhs.alias == rhs.alias
       && lhs.table_name == rhs.table_name
       && lhs.time_column == rhs.time_column
       && lhs.selected_variables == rhs.selected_variables;
@@ -1032,12 +1106,17 @@ inline bool operator==(const ProjectSource& lhs, const ProjectSource& rhs) {
 inline bool operator==(const PlotSeriesConfig& lhs, const PlotSeriesConfig& rhs) {
   return lhs.name == rhs.name
       && lhs.expression == rhs.expression
+      && lhs.source_alias == rhs.source_alias
+      && lhs.source_path == rhs.source_path
+      && lhs.table_name == rhs.table_name
+      && lhs.time_column == rhs.time_column
+      && lhs.value_column == rhs.value_column
       && lhs.visible == rhs.visible
       && lhs.derived == rhs.derived
       && lhs.color == rhs.color;
 }
 
-inline bool operator==(const PlotViewConfig& lhs, const PlotViewConfig& rhs) {
+inline bool operator==(const PlotTabConfig& lhs, const PlotTabConfig& rhs) {
   return lhs.title == rhs.title
       && lhs.series == rhs.series
       && lhs.autoscale_x == rhs.autoscale_x
@@ -1046,8 +1125,18 @@ inline bool operator==(const PlotViewConfig& lhs, const PlotViewConfig& rhs) {
       && lhs.y_range == rhs.y_range;
 }
 
+inline bool operator==(const AnalysisWindowConfig& lhs, const AnalysisWindowConfig& rhs) {
+  return lhs.title == rhs.title
+      && lhs.tabs == rhs.tabs
+      && lhs.active_tab == rhs.active_tab;
+}
+
+inline bool operator==(const WorkspaceConfig& lhs, const WorkspaceConfig& rhs) {
+  return lhs.windows == rhs.windows;
+}
+
 inline bool operator==(const ProjectState& lhs, const ProjectState& rhs) {
-  return lhs.sources == rhs.sources && lhs.views == rhs.views;
+  return lhs.sources == rhs.sources && lhs.workspace == rhs.workspace;
 }
 
 inline std::vector<std::string> missing_variables(const std::vector<std::string>& selected, const std::vector<std::string>& available) {

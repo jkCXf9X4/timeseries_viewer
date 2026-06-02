@@ -162,23 +162,199 @@ TEST_CASE("Project JSON round-trips", "[project]") {
   state.sources.push_back(tsv::ProjectSource{
     tsv::SourceKind::Csv,
     "/tmp/source.csv",
+    "source",
     std::nullopt,
     std::optional<std::string>{"time"},
     {"source.speed", "source.altitude"}
   });
-  state.views.push_back(tsv::PlotViewConfig{
-    "main",
-    {tsv::PlotSeriesConfig{"source.speed", "", true, false, {1.0, 0.0, 0.0, 1.0}}},
-    true,
-    true,
-    std::nullopt,
-    std::nullopt
+  state.workspace.windows.push_back(tsv::AnalysisWindowConfig{
+    "window-1",
+    {
+      tsv::PlotTabConfig{
+        "main",
+        {tsv::PlotSeriesConfig{
+          "source.speed",
+          "",
+          std::optional<std::string>{"source"},
+          std::optional<std::string>{"/tmp/source.csv"},
+          std::optional<std::string>{},
+          std::optional<std::string>{"time"},
+          std::optional<std::string>{"speed"},
+          true,
+          false,
+          {1.0, 0.0, 0.0, 1.0}
+        }},
+        true,
+        true,
+        std::nullopt,
+        std::nullopt
+      }
+    },
+    0
   });
 
   const auto temp = make_temp_dir() / "project.json";
   tsv::save_project(temp, state);
   const auto loaded = tsv::load_project(temp);
   REQUIRE(loaded == state);
+}
+
+TEST_CASE("Workspace layout round-trips across multiple windows and tabs", "[project]") {
+  tsv::ProjectState state;
+  state.sources.push_back(tsv::ProjectSource{
+    tsv::SourceKind::Csv,
+    "/tmp/run_a.csv",
+    "run_a",
+    std::nullopt,
+    std::nullopt,
+    {"run_a.speed", "run_a.altitude"}
+  });
+  state.sources.push_back(tsv::ProjectSource{
+    tsv::SourceKind::Sqlite,
+    "/tmp/run_b.sqlite",
+    "run_b",
+    std::optional<std::string>{"telemetry"},
+    std::optional<std::string>{"timestamp"},
+    {"run_b.telemetry.speed"}
+  });
+
+  state.workspace.windows.push_back(tsv::AnalysisWindowConfig{
+    "window-a",
+    {
+      tsv::PlotTabConfig{
+        "tab-1",
+        {
+          tsv::PlotSeriesConfig{
+            "run_a.speed",
+            "",
+            std::optional<std::string>{"run_a"},
+            std::optional<std::string>{"/tmp/run_a.csv"},
+            std::optional<std::string>{},
+            std::optional<std::string>{"time"},
+            std::optional<std::string>{"speed"},
+            true,
+            false,
+            {1.0, 0.0, 0.0, 1.0}
+          }
+        },
+        true,
+        true,
+        std::nullopt,
+        std::nullopt
+      },
+      tsv::PlotTabConfig{
+        "tab-2",
+        {
+          tsv::PlotSeriesConfig{
+            "run_a.altitude",
+            "",
+            std::optional<std::string>{"run_a"},
+            std::optional<std::string>{"/tmp/run_a.csv"},
+            std::optional<std::string>{},
+            std::optional<std::string>{"time"},
+            std::optional<std::string>{"altitude"},
+            true,
+            false,
+            {0.0, 1.0, 0.0, 1.0}
+          }
+        },
+        true,
+        true,
+        std::nullopt,
+        std::nullopt
+      }
+    },
+    1
+  });
+  state.workspace.windows.push_back(tsv::AnalysisWindowConfig{
+    "window-b",
+    {
+      tsv::PlotTabConfig{
+        "comparison",
+        {
+          tsv::PlotSeriesConfig{
+            "run_b.telemetry.speed",
+            "",
+            std::optional<std::string>{"run_b"},
+            std::optional<std::string>{"/tmp/run_b.sqlite"},
+            std::optional<std::string>{"telemetry"},
+            std::optional<std::string>{"timestamp"},
+            std::optional<std::string>{"speed"},
+            true,
+            false,
+            {0.0, 0.0, 1.0, 1.0}
+          },
+          tsv::PlotSeriesConfig{
+            "run_a.speed_minus_run_b.telemetry.speed",
+            "series('run_a.speed') - series('run_b.telemetry.speed')",
+            std::nullopt,
+            std::nullopt,
+            std::nullopt,
+            std::nullopt,
+            std::nullopt,
+            true,
+            true,
+            {1.0, 1.0, 0.0, 1.0}
+          }
+        },
+        true,
+        true,
+        std::nullopt,
+        std::nullopt
+      }
+    },
+    0
+  });
+
+  const auto temp = make_temp_dir() / "workspace.json";
+  tsv::save_project(temp, state);
+  const auto loaded = tsv::load_project(temp);
+  REQUIRE(loaded == state);
+  REQUIRE(loaded.workspace.windows.size() == 2);
+  REQUIRE(loaded.workspace.windows[0].tabs.size() == 2);
+  REQUIRE(loaded.workspace.windows[1].tabs.size() == 1);
+  REQUIRE(loaded.workspace.windows[1].tabs[0].series.size() == 2);
+}
+
+TEST_CASE("Legacy project views load into a workspace", "[project]") {
+  const auto temp = make_temp_dir() / "legacy_project.json";
+  const nlohmann::json legacy = {
+    {"sources", {
+      {
+        {"kind", "csv"},
+        {"path", "/tmp/source.csv"},
+        {"alias", "source"},
+        {"selected_variables", {"source.speed"}}
+      }
+    }},
+    {"views", {
+      {
+        {"title", "main"},
+        {"series", {
+          {
+            {"name", "source.speed"},
+            {"expression", ""},
+            {"visible", true},
+            {"derived", false},
+            {"color", {1.0, 0.0, 0.0, 1.0}}
+          }
+        }},
+        {"autoscale_x", true},
+        {"autoscale_y", true}
+      }
+    }}
+  };
+  {
+    std::ofstream out(temp);
+    out << legacy.dump(2) << '\n';
+  }
+
+  const auto loaded = tsv::load_project(temp);
+  REQUIRE(loaded.workspace.windows.size() == 1);
+  REQUIRE(loaded.workspace.windows.front().tabs.size() == 1);
+  REQUIRE(loaded.workspace.windows.front().tabs.front().title == "main");
+  REQUIRE(loaded.workspace.windows.front().tabs.front().series.size() == 1);
+  REQUIRE(loaded.workspace.windows.front().tabs.front().series.front().name == "source.speed");
 }
 
 TEST_CASE("Missing variables are reported after reload", "[reload]") {
