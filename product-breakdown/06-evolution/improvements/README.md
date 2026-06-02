@@ -19,3 +19,7 @@ Use these files to record:
 - [IMP-004 Native top-level windows](imp-004-native-top-level-windows.md)
 - [IMP-005 GUI integration verification](imp-005-gui-integration-verification.md)
 - [IMP-006 Large-data scaling strategy](imp-006-large-data-scaling.md)
+- [IMP-007 Rendered GUI workflow verification](candidates/imp-007-rendered-gui-workflow-verification.md)
+- [IMP-008 Variable browser workflow fidelity](candidates/imp-008-variable-browser-workflow-fidelity.md)
+- [IMP-009 Parameter menu discoverability](candidates/imp-009-parameter-menu-discoverability.md)
+- [IMP-010 Comparison label disambiguation](candidates/imp-010-comparison-label-disambiguation.md)
