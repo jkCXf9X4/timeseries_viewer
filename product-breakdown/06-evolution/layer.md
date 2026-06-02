@@ -37,3 +37,10 @@ The first release should prioritize the core workflow. Later changes should incr
 - Feature expansion can erode the low-dependency goal if it is not constrained.
 - Saved-view compatibility must be protected as the schema evolves.
 - Larger data support may require a revised internal data model.
+
+## Improvement Backlog
+
+Track unresolved product work in:
+
+- [improvement backlog overview](improvement-backlog.md)
+- [improvements](improvements/README.md)
