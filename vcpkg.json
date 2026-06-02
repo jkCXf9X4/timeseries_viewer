@@ -1,0 +1,18 @@
+{
+  "name": "timeseries-viewer",
+  "version-semver": "0.1.0",
+  "builtin-baseline": "296b89248ad13be09e9324488eb4f74dd322d26c",
+  "dependencies": [
+    "catch2",
+    "glad",
+    "glfw3",
+    "imgui",
+    "implot",
+    "lua",
+    "nativefiledialog-extended",
+    "nlohmann-json",
+    "sol2",
+    "sqlite3"
+  ]
+}
+
