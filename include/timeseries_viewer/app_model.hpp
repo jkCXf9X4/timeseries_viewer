@@ -19,6 +19,14 @@ struct OpenSource {
   std::optional<fs::file_time_type> last_write_time;
 };
 
+struct BindableParameter {
+  std::string display_name;
+  std::string source_alias;
+  std::optional<std::string> table_name;
+  std::string value_column;
+  std::string source_path;
+};
+
 struct SeriesBindingKey {
   fs::path path;
   std::optional<std::string> table_name;
@@ -81,6 +89,11 @@ void bind_series_to_source(
 );
 void add_derived_series(AppState& app);
 void add_derived_series_to_tab(AppState& app, std::size_t window_index, std::size_t tab_index);
+
+[[nodiscard]] std::vector<BindableParameter> list_bindable_parameters(const OpenSource& source);
+[[nodiscard]] tsv::TreeNode build_bindable_parameter_tree(const OpenSource& source);
+[[nodiscard]] std::optional<BindableParameter> find_bindable_parameter(const OpenSource& source, const std::string& display_name);
+[[nodiscard]] std::string plot_legend_label(const tsv::PlotSeriesConfig& series);
 
 void save_project_file(AppState& app, const fs::path& path);
 void load_project_file(AppState& app, const fs::path& path);

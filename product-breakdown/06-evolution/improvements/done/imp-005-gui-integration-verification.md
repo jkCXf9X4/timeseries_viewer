@@ -21,7 +21,7 @@ The most fragile user-facing behavior lives in the UI: source selection, paramet
 
 ## Progress State
 
-`Backlog`
+`Done`
 
 ## Acceptance Criteria
 
@@ -33,3 +33,8 @@ The most fragile user-facing behavior lives in the UI: source selection, paramet
 
 - Product need: [01-product/use-cases](../../01-product/use-cases.md)
 - Verification layer: [04-verification](../../04-verification/layer.md)
+
+## Implementation Notes
+
+- The integration coverage now includes a scripted GUI render path in `tests/gui_render_tests.cpp`.
+- The test suite exercises source opening, browsing, binding, derived series creation, and save/load through the shared render code.

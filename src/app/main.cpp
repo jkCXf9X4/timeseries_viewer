@@ -1,11 +1,10 @@
 #include <array>
-#include <chrono>
-#include <cstddef>
+#include <cstdint>
 #include <cstdio>
-#include <cstring>
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #define GLFW_INCLUDE_NONE
@@ -16,6 +15,7 @@
 #include <nfd.h>
 
 #include "timeseries_viewer/app_model.hpp"
+#include "timeseries_viewer/app_ui.hpp"
 
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -24,381 +24,235 @@ namespace fs = std::filesystem;
 
 namespace {
 
-bool input_text_string(const char* label, std::string& value, std::size_t buffer_size = 1024) {
-  std::vector<char> buffer(buffer_size, '\0');
-  std::snprintf(buffer.data(), buffer.size(), "%s", value.c_str());
-  if (ImGui::InputText(label, buffer.data(), buffer.size())) {
-    value = buffer.data();
-    return true;
+struct ImGuiBackend {
+  bool begin_window(std::string_view title, std::string_view) {
+    const std::string label(title);
+    return ImGui::Begin(label.c_str());
   }
-  return false;
-}
 
-std::optional<fs::path> open_dialog() {
-  nfdu8char_t* out_path = nullptr;
-  const nfdu8filteritem_t filters[] = {
-    {"Time series", "csv,sqlite,db"}
-  };
-  const auto result = NFD_OpenDialogU8(&out_path, filters, 1, nullptr);
-  if (result != NFD_OKAY) {
-    return std::nullopt;
+  void end_window() {
+    ImGui::End();
   }
-  fs::path path(reinterpret_cast<const char*>(out_path));
-  NFD_FreePathU8(out_path);
-  return path;
-}
 
-std::optional<fs::path> save_dialog() {
-  nfdu8char_t* out_path = nullptr;
-  const nfdu8filteritem_t filters[] = {
-    {"Project", "json"}
-  };
-  const auto result = NFD_SaveDialogU8(&out_path, filters, 1, nullptr, nullptr);
-  if (result != NFD_OKAY) {
-    return std::nullopt;
+  bool button(std::string_view label, std::string_view) {
+    const std::string text(label);
+    return ImGui::Button(text.c_str());
   }
-  fs::path path(reinterpret_cast<const char*>(out_path));
-  NFD_FreePathU8(out_path);
-  return path;
-}
 
-std::optional<fs::path> open_project_dialog() {
-  nfdu8char_t* out_path = nullptr;
-  const nfdu8filteritem_t filters[] = {
-    {"Project", "json"}
-  };
-  const auto result = NFD_OpenDialogU8(&out_path, filters, 1, nullptr);
-  if (result != NFD_OKAY) {
-    return std::nullopt;
+  bool small_button(std::string_view label, std::string_view) {
+    const std::string text(label);
+    return ImGui::SmallButton(text.c_str());
   }
-  fs::path path(reinterpret_cast<const char*>(out_path));
-  NFD_FreePathU8(out_path);
-  return path;
-}
 
-const tsv::app::OpenSource* source_by_index(const tsv::app::AppState& app, std::size_t index) {
-  if (index >= app.sources.size()) {
-    return nullptr;
+  bool selectable(std::string_view label, bool selected, std::string_view) {
+    const std::string text(label);
+    return ImGui::Selectable(text.c_str(), selected);
   }
-  return &app.sources[index];
-}
 
-void render_series_editor(tsv::app::AppState& app, std::size_t window_index, std::size_t tab_index) {
-  auto& tab = app.workspace.windows.at(window_index).tabs.at(tab_index);
+  bool checkbox(std::string_view label, bool& value, std::string_view) {
+    const std::string text(label);
+    return ImGui::Checkbox(text.c_str(), &value);
+  }
 
-  ImGui::SeparatorText("Plot Settings");
-  input_text_string("Tab title", tab.title);
-  ImGui::Checkbox("Autoscale X", &tab.autoscale_x);
-  ImGui::SameLine();
-  ImGui::Checkbox("Autoscale Y", &tab.autoscale_y);
-
-  if (!tab.autoscale_x) {
-    double range[2] = {0.0, 1.0};
-    if (tab.x_range.has_value()) {
-      range[0] = tab.x_range->at(0);
-      range[1] = tab.x_range->at(1);
+  bool input_text(std::string_view label, std::string& value, std::string_view) {
+    std::vector<char> buffer(1024, '\0');
+    std::snprintf(buffer.data(), buffer.size(), "%s", value.c_str());
+    const std::string text(label);
+    if (ImGui::InputText(text.c_str(), buffer.data(), buffer.size())) {
+      value = buffer.data();
+      return true;
     }
-    if (ImGui::InputScalarN("X range", ImGuiDataType_Double, range, 2)) {
-      tab.x_range = std::array<double, 2>{range[0], range[1]};
-    }
-  }
-  if (!tab.autoscale_y) {
-    double range[2] = {0.0, 1.0};
-    if (tab.y_range.has_value()) {
-      range[0] = tab.y_range->at(0);
-      range[1] = tab.y_range->at(1);
-    }
-    if (ImGui::InputScalarN("Y range", ImGuiDataType_Double, range, 2)) {
-      tab.y_range = std::array<double, 2>{range[0], range[1]};
-    }
+    return false;
   }
 
-  ImGui::SeparatorText("Series");
-  if (ImGui::BeginTable("series_table", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
-    ImGui::TableSetupColumn("Name");
-    ImGui::TableSetupColumn("Visible");
-    ImGui::TableSetupColumn("Color");
-    ImGui::TableSetupColumn("Remove");
-    ImGui::TableHeadersRow();
-
-    for (std::size_t i = 0; i < tab.series.size(); ++i) {
-      auto& series = tab.series[i];
-      ImGui::PushID(static_cast<int>(i));
-      ImGui::TableNextRow();
-      ImGui::TableSetColumnIndex(0);
-      const bool selected = tab.active_series_index == i;
-      if (ImGui::Selectable(series.name.c_str(), selected)) {
-        tsv::app::select_series(app, window_index, tab_index, i);
-      }
-      ImGui::TableSetColumnIndex(1);
-      ImGui::Checkbox("##visible", &series.visible);
-      ImGui::TableSetColumnIndex(2);
-      float color[4] = {
-        static_cast<float>(series.color[0]),
-        static_cast<float>(series.color[1]),
-        static_cast<float>(series.color[2]),
-        static_cast<float>(series.color[3])
-      };
-      if (ImGui::ColorEdit4("##color", color, ImGuiColorEditFlags_NoInputs)) {
-        for (std::size_t j = 0; j < 4; ++j) {
-          series.color[j] = color[j];
-        }
-      }
-      ImGui::TableSetColumnIndex(3);
-      if (ImGui::SmallButton("X")) {
-        tsv::app::remove_series(app, window_index, tab_index, i);
-        ImGui::PopID();
-        break;
-      }
-      ImGui::PopID();
-    }
-    ImGui::EndTable();
+  bool input_u64(std::string_view label, std::uint64_t& value, std::string_view) {
+    const std::string text(label);
+    return ImGui::InputScalar(text.c_str(), ImGuiDataType_U64, &value);
   }
 
-  if (tab.active_series_index < tab.series.size()) {
-    auto& series = tab.series[tab.active_series_index];
-    ImGui::SeparatorText("Selected Series");
-    input_text_string("Series name", series.name);
-    ImGui::Checkbox("Visible##selected", &series.visible);
-
-    float color[4] = {
-      static_cast<float>(series.color[0]),
-      static_cast<float>(series.color[1]),
-      static_cast<float>(series.color[2]),
-      static_cast<float>(series.color[3])
-    };
-    if (ImGui::ColorEdit4("Series color", color, ImGuiColorEditFlags_NoInputs)) {
-      for (std::size_t j = 0; j < 4; ++j) {
-        series.color[j] = color[j];
-      }
-    }
-
-    if (series.derived) {
-      input_text_string("Expression", series.expression);
-      if (ImGui::Button("Update derived")) {
-        tsv::app::rebuild_cache(app);
-      }
-    } else {
-      ImGui::Text("Source: %s", series.source_alias.value_or(std::string{"?"}).c_str());
-      ImGui::Text("Binding: %s%s%s",
-        series.table_name.has_value() ? series.table_name->c_str() : "",
-        series.table_name.has_value() ? "." : "",
-        series.value_column.has_value() ? series.value_column->c_str() : ""
-      );
-      if (series.time_column.has_value()) {
-        ImGui::Text("Time: %s", series.time_column->c_str());
-      }
-    }
-
-    if (ImGui::Button("Remove selected")) {
-      tsv::app::remove_series(app, window_index, tab_index, tab.active_series_index);
-    }
+  bool input_double_range(std::string_view label, std::array<double, 2>& value, std::string_view) {
+    const std::string text(label);
+    return ImGui::InputScalarN(text.c_str(), ImGuiDataType_Double, value.data(), 2);
   }
 
-  ImGui::SeparatorText("Derived Series");
-  input_text_string("Expression draft", tab.expression_draft);
-  if (ImGui::Button("Add derived")) {
-    tsv::app::add_derived_series_to_tab(app, window_index, tab_index);
-  }
-}
-
-void render_parameter_panel(tsv::app::AppState& app) {
-  tsv::app::ensure_workspace_defaults(app);
-  ImGui::Begin("Parameters");
-
-  if (ImGui::Button("Open")) {
-    if (const auto path = open_dialog(); path.has_value()) {
-      tsv::app::open_source(app, *path);
-      tsv::app::rebuild_cache(app);
-    }
-  }
-  ImGui::SameLine();
-  if (ImGui::Button("Reload")) {
-    tsv::app::rebuild_cache(app);
-  }
-  ImGui::SameLine();
-  ImGui::Checkbox("Live", &app.live_mode);
-
-  if (ImGui::Button("Open project")) {
-    if (const auto path = open_project_dialog(); path.has_value()) {
-      tsv::app::load_project_file(app, *path);
-    }
-  }
-  ImGui::SameLine();
-  if (ImGui::Button("Save project")) {
-    if (const auto path = save_dialog(); path.has_value()) {
-      tsv::app::save_project_file(app, *path);
-    }
+  bool begin_combo(std::string_view label, std::string_view preview, std::string_view) {
+    const std::string combo_label(label);
+    const std::string combo_preview(preview);
+    return ImGui::BeginCombo(combo_label.c_str(), combo_preview.c_str());
   }
 
-  ImGui::SameLine();
-  if (ImGui::Button("New window")) {
-    tsv::app::add_window(app);
-  }
-
-  ImGui::SameLine();
-  if (ImGui::Button("New tab")) {
-    tsv::app::add_tab(app, static_cast<std::size_t>(app.active_window));
-  }
-
-  ImGui::SeparatorText("Workspace");
-  if (ImGui::BeginCombo("Active window", app.workspace.windows.at(static_cast<std::size_t>(app.active_window)).title.c_str())) {
-    for (std::size_t i = 0; i < app.workspace.windows.size(); ++i) {
-      const bool selected = static_cast<int>(i) == app.active_window;
-      if (ImGui::Selectable(app.workspace.windows[i].title.c_str(), selected)) {
-        app.active_window = static_cast<int>(i);
-      }
-      if (selected) {
-        ImGui::SetItemDefaultFocus();
-      }
-    }
+  void end_combo() {
     ImGui::EndCombo();
   }
 
-  unsigned long long budget = static_cast<unsigned long long>(app.workspace.point_budget);
-  if (ImGui::InputScalar("Point budget", ImGuiDataType_U64, &budget)) {
-    app.workspace.point_budget = static_cast<std::size_t>(budget);
-    tsv::app::rebuild_cache(app);
-  }
-  ImGui::TextDisabled("0 means no explicit downsampling limit");
-
-  auto& window = tsv::app::active_window(app);
-  auto& tab = tsv::app::active_tab(app);
-  ImGui::SeparatorText("Active Target");
-  ImGui::Text("Window: %s", window.title.c_str());
-  ImGui::Text("Tab: %s", tab.title.c_str());
-  if (tab.active_series_index < tab.series.size()) {
-    ImGui::Text("Series: %s", tab.series[tab.active_series_index].name.c_str());
-  } else {
-    ImGui::TextDisabled("Series: none");
+  bool tree_node(std::string_view label, std::string_view) {
+    const std::string text(label);
+    return ImGui::TreeNode(text.c_str());
   }
 
-  ImGui::SeparatorText("Parameter Browser");
-  if (app.sources.empty()) {
-    ImGui::TextDisabled("Open a CSV file or SQLite database to browse parameters.");
+  void tree_pop() {
+    ImGui::TreePop();
   }
 
-  for (const auto& source : app.sources) {
-    if (ImGui::TreeNode(source.alias.c_str())) {
-      ImGui::TextDisabled("%s", source.catalog.path.string().c_str());
-      for (const auto& table : source.catalog.tables) {
-        const bool nested = source.catalog.kind == tsv::SourceKind::Sqlite || source.catalog.tables.size() > 1;
-        const auto table_label = nested ? table.name.c_str() : "";
-        if (nested) {
-          if (ImGui::TreeNode(table_label)) {
-            for (const auto& column : table.columns) {
-              if (column.time_candidate) {
-                continue;
-              }
-              const auto selected_series_index = tab.active_series_index;
-              const bool can_bind = selected_series_index < tab.series.size() && !tab.series[selected_series_index].derived;
-              ImGui::PushID(column.name.c_str());
-              if (ImGui::Selectable(column.name.c_str())) {
-                tsv::app::add_raw_series(app, source, table.name, column.name);
-              }
-              if (can_bind) {
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Bind selected")) {
-                  tsv::app::bind_series_to_source(app, static_cast<std::size_t>(app.active_window), window.active_tab, selected_series_index, source, table.name, column.name);
-                }
-              }
-              ImGui::PopID();
-            }
-            ImGui::TreePop();
-          }
-        } else {
-          for (const auto& column : table.columns) {
-            if (column.time_candidate) {
-              continue;
-            }
-            const auto selected_series_index = tab.active_series_index;
-            const bool can_bind = selected_series_index < tab.series.size() && !tab.series[selected_series_index].derived;
-            ImGui::PushID(column.name.c_str());
-            if (ImGui::Selectable(column.name.c_str())) {
-              tsv::app::add_raw_series(app, source, std::nullopt, column.name);
-            }
-            if (can_bind) {
-              ImGui::SameLine();
-              if (ImGui::SmallButton("Bind selected")) {
-                tsv::app::bind_series_to_source(app, static_cast<std::size_t>(app.active_window), window.active_tab, selected_series_index, source, std::nullopt, column.name);
-              }
-            }
-            ImGui::PopID();
-          }
-        }
-      }
-      ImGui::TreePop();
+  bool begin_table(std::string_view id, int columns) {
+    const std::string table_id(id);
+    return ImGui::BeginTable(table_id.c_str(), columns, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp);
+  }
+
+  void end_table() {
+    ImGui::EndTable();
+  }
+
+  void table_setup_column(std::string_view label) {
+    const std::string text(label);
+    ImGui::TableSetupColumn(text.c_str());
+  }
+
+  void table_headers_row() {
+    ImGui::TableHeadersRow();
+  }
+
+  void table_next_row() {
+    ImGui::TableNextRow();
+  }
+
+  void table_set_column_index(int index) {
+    ImGui::TableSetColumnIndex(index);
+  }
+
+  bool begin_tab_bar(std::string_view id) {
+    const std::string tab_id(id);
+    return ImGui::BeginTabBar(tab_id.c_str());
+  }
+
+  void end_tab_bar() {
+    ImGui::EndTabBar();
+  }
+
+  bool begin_tab_item(std::string_view label, bool, std::string_view) {
+    const std::string text(label);
+    return ImGui::BeginTabItem(text.c_str());
+  }
+
+  void end_tab_item() {
+    ImGui::EndTabItem();
+  }
+
+  bool begin_plot(std::string_view id) {
+    const std::string plot_id(id);
+    return ImPlot::BeginPlot(plot_id.c_str(), ImVec2(-1, 360));
+  }
+
+  void setup_axes(std::string_view x_label, std::string_view y_label, bool autoscale_x, bool autoscale_y) {
+    const std::string x(x_label);
+    const std::string y(y_label);
+    ImPlot::SetupAxes(x.c_str(), y.c_str(), autoscale_x ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None, autoscale_y ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None);
+  }
+
+  void setup_axis_limits(std::string_view axis, double min_value, double max_value) {
+    if (axis == "x") {
+      ImPlot::SetupAxisLimits(ImAxis_X1, min_value, max_value, ImGuiCond_Always);
+    } else {
+      ImPlot::SetupAxisLimits(ImAxis_Y1, min_value, max_value, ImGuiCond_Always);
     }
   }
 
-  if (!app.series_errors.empty()) {
-    ImGui::SeparatorText("Series Errors");
-    for (const auto& [name, error] : app.series_errors) {
-      ImGui::BulletText("%s: %s", name.c_str(), error.c_str());
-    }
+  void plot_line(std::string_view label, const tsv::SeriesData& series) {
+    const std::string text(label);
+    ImPlot::PlotLine(text.c_str(), series.time.data(), series.value.data(), static_cast<int>(series.time.size()));
   }
 
-  ImGui::TextWrapped("%s", app.status.c_str());
-  ImGui::End();
-}
-
-void render_analysis_windows(tsv::app::AppState& app) {
-  tsv::app::ensure_workspace_defaults(app);
-  for (std::size_t window_index = 0; window_index < app.workspace.windows.size(); ++window_index) {
-    auto& window = app.workspace.windows[window_index];
-    if (ImGui::Begin(window.title.c_str())) {
-      if (ImGui::Button("New tab")) {
-        tsv::app::add_tab(app, window_index);
-      }
-      ImGui::SameLine();
-      ImGui::TextDisabled("Window %zu", window_index + 1);
-
-      const auto tab_bar_id = "tabs##" + std::to_string(window_index);
-      if (ImGui::BeginTabBar(tab_bar_id.c_str())) {
-        for (std::size_t tab_index = 0; tab_index < window.tabs.size(); ++tab_index) {
-          auto& tab = window.tabs[tab_index];
-          if (ImGui::BeginTabItem(tab.title.c_str())) {
-            window.active_tab = tab_index;
-            app.active_window = static_cast<int>(window_index);
-
-            render_series_editor(app, window_index, tab_index);
-            ImGui::SeparatorText("Plot");
-
-            if (ImPlot::BeginPlot(("plot##" + std::to_string(window_index) + "_" + std::to_string(tab_index)).c_str(), ImVec2(-1, 360))) {
-              if (tab.autoscale_x && tab.autoscale_y) {
-                ImPlot::SetupAxes("time", "value", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
-              } else {
-                ImPlot::SetupAxes("time", "value", tab.autoscale_x ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None, tab.autoscale_y ? ImPlotAxisFlags_AutoFit : ImPlotAxisFlags_None);
-                if (!tab.autoscale_x && tab.x_range.has_value()) {
-                  ImPlot::SetupAxisLimits(ImAxis_X1, tab.x_range->at(0), tab.x_range->at(1), ImGuiCond_Always);
-                }
-                if (!tab.autoscale_y && tab.y_range.has_value()) {
-                  ImPlot::SetupAxisLimits(ImAxis_Y1, tab.y_range->at(0), tab.y_range->at(1), ImGuiCond_Always);
-                }
-              }
-
-              for (const auto& series_cfg : tab.series) {
-                const auto it = app.series_cache.find(series_cfg.name);
-                if (it == app.series_cache.end()) {
-                  continue;
-                }
-                const auto& series = it->second;
-                if (series_cfg.visible && !series.time.empty() && !series.value.empty()) {
-                  ImPlot::PlotLine(series_cfg.name.c_str(), series.time.data(), series.value.data(), static_cast<int>(series.time.size()));
-                }
-              }
-              ImPlot::EndPlot();
-            }
-
-            ImGui::EndTabItem();
-          }
-        }
-        ImGui::EndTabBar();
-      }
-    }
-    ImGui::End();
+  void end_plot() {
+    ImPlot::EndPlot();
   }
-}
+
+  void separator_text(std::string_view text) {
+    const std::string label(text);
+    ImGui::SeparatorText(label.c_str());
+  }
+
+  void same_line() {
+    ImGui::SameLine();
+  }
+
+  void text(std::string_view value) {
+    const std::string text_value(value);
+    ImGui::TextUnformatted(text_value.c_str());
+  }
+
+  void text_disabled(std::string_view value) {
+    const std::string text_value(value);
+    ImGui::TextDisabled("%s", text_value.c_str());
+  }
+
+  void push_id(std::string_view id) {
+    const std::string text(id);
+    ImGui::PushID(text.c_str());
+  }
+
+  void pop_id() {
+    ImGui::PopID();
+  }
+
+  bool color_edit4(std::string_view label, std::array<double, 4>& value, std::string_view) {
+    float color[4] = {
+      static_cast<float>(value[0]),
+      static_cast<float>(value[1]),
+      static_cast<float>(value[2]),
+      static_cast<float>(value[3])
+    };
+    const std::string text(label);
+    if (ImGui::ColorEdit4(text.c_str(), color, ImGuiColorEditFlags_NoInputs)) {
+      for (std::size_t index = 0; index < 4; ++index) {
+        value[index] = color[index];
+      }
+      return true;
+    }
+    return false;
+  }
+
+  std::optional<fs::path> open_source_dialog() {
+    nfdu8char_t* out_path = nullptr;
+    const nfdu8filteritem_t filters[] = {
+      {"Time series", "csv,sqlite,db"}
+    };
+    const auto result = NFD_OpenDialogU8(&out_path, filters, 1, nullptr);
+    if (result != NFD_OKAY) {
+      return std::nullopt;
+    }
+    fs::path path(reinterpret_cast<const char*>(out_path));
+    NFD_FreePathU8(out_path);
+    return path;
+  }
+
+  std::optional<fs::path> open_project_dialog() {
+    nfdu8char_t* out_path = nullptr;
+    const nfdu8filteritem_t filters[] = {
+      {"Project", "json"}
+    };
+    const auto result = NFD_OpenDialogU8(&out_path, filters, 1, nullptr);
+    if (result != NFD_OKAY) {
+      return std::nullopt;
+    }
+    fs::path path(reinterpret_cast<const char*>(out_path));
+    NFD_FreePathU8(out_path);
+    return path;
+  }
+
+  std::optional<fs::path> save_project_dialog() {
+    nfdu8char_t* out_path = nullptr;
+    const nfdu8filteritem_t filters[] = {
+      {"Project", "json"}
+    };
+    const auto result = NFD_SaveDialogU8(&out_path, filters, 1, nullptr, nullptr);
+    if (result != NFD_OKAY) {
+      return std::nullopt;
+    }
+    fs::path path(reinterpret_cast<const char*>(out_path));
+    NFD_FreePathU8(out_path);
+    return path;
+  }
+};
 
 } // namespace
 
@@ -444,6 +298,8 @@ int main() {
   tsv::app::ensure_workspace_defaults(app);
   app.workspace.windows.front().tabs.front().expression_draft = "series(\"source.variable\")";
 
+  ImGuiBackend ui;
+
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
     tsv::app::poll_live_reload(app);
@@ -452,8 +308,7 @@ int main() {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    render_parameter_panel(app);
-    render_analysis_windows(app);
+    tsv::ui::render_app(app, ui);
 
     ImGui::Render();
     int display_w = 0;

@@ -22,7 +22,7 @@ The variable browser is the main discovery surface for UC-01. If selection, expa
 
 ## Progress State
 
-`Backlog`
+`Done`
 
 ## Acceptance Criteria
 
@@ -35,3 +35,8 @@ The variable browser is the main discovery surface for UC-01. If selection, expa
 - Product need: [01-product/use-cases](../../01-product/use-cases.md)
 - Verification: [04-verification](../../04-verification/layer.md)
 - Architecture: [02-architecture](../../02-architecture/layer.md)
+
+## Implementation Notes
+
+- The browser now renders a dotted-name tree built from bindable parameters rather than a flat column list.
+- The render-path tests verify that parent nodes are navigation-only and that leaf selection adds the expected series even with large parameter sets.

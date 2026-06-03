@@ -22,7 +22,7 @@ Comparison workflows depend on the user being able to tell series apart quickly.
 
 ## Progress State
 
-`Backlog`
+`Done`
 
 ## Acceptance Criteria
 
@@ -35,3 +35,8 @@ Comparison workflows depend on the user being able to tell series apart quickly.
 - Product need: [01-product/use-cases](../../01-product/use-cases.md)
 - Verification: [04-verification](../../04-verification/layer.md)
 - Product scope: [01-product/layer.md](../../01-product/layer.md)
+
+## Implementation Notes
+
+- Plot labels now include the source alias and backing file name for raw series.
+- Derived-series labels include the expression, and the render-path tests assert that similar names remain distinct after save/load.

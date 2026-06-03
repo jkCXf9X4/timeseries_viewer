@@ -505,6 +505,73 @@ void add_derived_series_to_tab(AppState& app, std::size_t window_index, std::siz
   }
 }
 
+std::vector<BindableParameter> list_bindable_parameters(const OpenSource& source) {
+  std::vector<BindableParameter> parameters;
+  for (const auto& table : source.catalog.tables) {
+    const auto time_column = tsv::infer_time_column(table.columns);
+    for (const auto& column : table.columns) {
+      if (time_column.has_value() && column.name == *time_column) {
+        continue;
+      }
+
+      BindableParameter parameter;
+      parameter.source_alias = source.alias;
+      parameter.source_path = source.catalog.path.string();
+      parameter.value_column = column.name;
+      if (source.catalog.kind == tsv::SourceKind::Sqlite) {
+        parameter.table_name = table.name;
+        parameter.display_name = source.alias + "." + table.name + "." + column.name;
+      } else {
+        parameter.display_name = source.alias + "." + column.name;
+      }
+      parameters.push_back(std::move(parameter));
+    }
+  }
+
+  std::sort(parameters.begin(), parameters.end(), [](const BindableParameter& lhs, const BindableParameter& rhs) {
+    return lhs.display_name < rhs.display_name;
+  });
+  return parameters;
+}
+
+tsv::TreeNode build_bindable_parameter_tree(const OpenSource& source) {
+  std::vector<std::string> names;
+  names.reserve(source.catalog.tables.size() * 4);
+  for (const auto& parameter : list_bindable_parameters(source)) {
+    names.push_back(parameter.display_name);
+  }
+  return tsv::build_variable_tree(names);
+}
+
+std::optional<BindableParameter> find_bindable_parameter(const OpenSource& source, const std::string& display_name) {
+  const auto parameters = list_bindable_parameters(source);
+  const auto it = std::find_if(parameters.begin(), parameters.end(), [&](const BindableParameter& parameter) {
+    return parameter.display_name == display_name;
+  });
+  if (it == parameters.end()) {
+    return std::nullopt;
+  }
+  return *it;
+}
+
+std::string plot_legend_label(const tsv::PlotSeriesConfig& series) {
+  if (series.derived) {
+    if (!series.expression.empty()) {
+      return series.name + " := " + series.expression;
+    }
+    return series.name + " (derived)";
+  }
+
+  std::string label = series.name;
+  if (series.source_alias.has_value() && !series.source_alias->empty()) {
+    label += " [" + *series.source_alias + "]";
+  }
+  if (series.source_path.has_value() && !series.source_path->empty()) {
+    label += " (" + fs::path(*series.source_path).filename().string() + ")";
+  }
+  return label;
+}
+
 void save_project_file(AppState& app, const fs::path& path) {
   tsv::ProjectState project;
   std::map<std::string, tsv::ProjectSource> entries;

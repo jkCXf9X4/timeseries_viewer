@@ -22,7 +22,7 @@ UC-04 requires an explicit selection surface where users can see which source ea
 
 ## Progress State
 
-`Backlog`
+`Done`
 
 ## Acceptance Criteria
 
@@ -35,3 +35,8 @@ UC-04 requires an explicit selection surface where users can see which source ea
 - Product need: [01-product/use-cases](../../01-product/use-cases.md)
 - Verification: [04-verification](../../04-verification/layer.md)
 - Implementation: [03-implementation](../../03-implementation/layer.md)
+
+## Implementation Notes
+
+- The parameter browser groups bindable parameters under each open source and shows the backing source path in the panel.
+- The UI keeps source bindings explicit and supports rebinding the currently selected series from the tree.

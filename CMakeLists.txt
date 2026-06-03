@@ -68,6 +68,7 @@ if(TSV_BUILD_TESTS)
   add_executable(timeseries_viewer_tests
     tests/core_tests.cpp
     tests/app_model_tests.cpp
+    tests/gui_render_tests.cpp
   )
 
   target_compile_definitions(timeseries_viewer_tests PRIVATE TSV_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")

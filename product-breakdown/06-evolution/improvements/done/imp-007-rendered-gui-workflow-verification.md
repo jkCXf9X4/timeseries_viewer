@@ -22,7 +22,7 @@ The product requirements for the parameter menu, window layout, and plot tabs ar
 
 ## Progress State
 
-`Backlog`
+`Done`
 
 ## Acceptance Criteria
 
@@ -35,3 +35,8 @@ The product requirements for the parameter menu, window layout, and plot tabs ar
 - Product need: [01-product/use-cases](../../01-product/use-cases.md)
 - Verification: [04-verification](../../04-verification/layer.md)
 - Implementation boundary: [03-implementation](../../03-implementation/layer.md)
+
+## Implementation Notes
+
+- The render path is exercised through `tsv::ui::render_app` with a scripted backend in `tests/support/scripted_gui_backend.hpp`.
+- The workflow coverage includes source opening, parameter browsing, tab/window creation, binding, derived-series creation, and save/load through the UI surface.
