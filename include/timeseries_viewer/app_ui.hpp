@@ -262,9 +262,12 @@ void render_analysis_windows(tsv::app::AppState& app, Ui& ui) {
     if (ui.begin_tab_bar(std::string("tabs##") + std::to_string(window_index))) {
       for (std::size_t tab_index = 0; tab_index < window.tabs.size(); ++tab_index) {
         auto& tab = window.tabs[tab_index];
+        const bool was_active_tab = window.active_tab == tab_index;
         if (ui.begin_tab_item(tab.title, window.active_tab == tab_index, std::string("tab-") + std::to_string(window_index) + "-" + std::to_string(tab_index))) {
-          window.active_tab = tab_index;
-          app.active_window = static_cast<int>(window_index);
+          if (!was_active_tab) {
+            window.active_tab = tab_index;
+            app.active_window = static_cast<int>(window_index);
+          }
 
           if (ui.begin_plot(std::string("plot##") + std::to_string(window_index) + "_" + std::to_string(tab_index))) {
             ui.setup_axes("time", "value", tab.autoscale_x, tab.autoscale_y);
@@ -273,6 +276,11 @@ void render_analysis_windows(tsv::app::AppState& app, Ui& ui) {
             }
             if (!tab.autoscale_y && tab.y_range.has_value()) {
               ui.setup_axis_limits("y", tab.y_range->at(0), tab.y_range->at(1));
+            }
+
+            if (ui.plot_clicked()) {
+              app.active_window = static_cast<int>(window_index);
+              window.active_tab = tab_index;
             }
 
             for (const auto& series_cfg : tab.series) {

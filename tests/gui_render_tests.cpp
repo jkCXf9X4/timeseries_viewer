@@ -264,3 +264,45 @@ TEST_CASE("Active plot follows focused windows and clicked tabs", "[ui][focus]")
     return text == "Tab: Plot 2";
   }));
 }
+
+TEST_CASE("Active plot follows clicked plot bodies in different windows", "[ui][focus]") {
+  tsv::app::AppState app;
+  tsv::app::ensure_workspace_defaults(app);
+  tsv::app::add_window(app, "Window 2");
+  tsv::app::add_tab(app, 1, "Plot 2");
+  app.active_window = 0;
+  app.workspace.windows[1].active_tab = 1;
+
+  tsv::test::ScriptedGuiBackend ui;
+  ui.click("plot##1_1");
+  tsv::ui::render_app(app, ui);
+
+  REQUIRE(app.active_window == 1);
+  REQUIRE(app.workspace.windows[1].active_tab == 1);
+  REQUIRE(std::any_of(ui.text_log.begin(), ui.text_log.end(), [](const std::string& text) {
+    return text == "Window: Window 2";
+  }));
+  REQUIRE(std::any_of(ui.text_log.begin(), ui.text_log.end(), [](const std::string& text) {
+    return text == "Tab: Plot 2";
+  }));
+}
+
+TEST_CASE("Later selected tabs do not override a clicked earlier plot", "[ui][focus]") {
+  tsv::app::AppState app;
+  tsv::app::ensure_workspace_defaults(app);
+  tsv::app::add_window(app, "Window 2");
+  app.active_window = 1;
+
+  tsv::test::ScriptedGuiBackend ui;
+  ui.click("plot##0_0");
+  tsv::ui::render_app(app, ui);
+
+  REQUIRE(app.active_window == 0);
+  REQUIRE(app.workspace.windows[0].active_tab == 0);
+  REQUIRE(std::any_of(ui.text_log.begin(), ui.text_log.end(), [](const std::string& text) {
+    return text == "Window: Window 1";
+  }));
+  REQUIRE(std::any_of(ui.text_log.begin(), ui.text_log.end(), [](const std::string& text) {
+    return text == "Tab: Plot 1";
+  }));
+}

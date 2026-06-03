@@ -197,6 +197,10 @@ struct ImGuiBackend {
     return ImPlot::BeginPlot(plot_id.c_str(), ImVec2(-1, 360));
   }
 
+  bool plot_clicked() const {
+    return ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+  }
+
   void setup_axes(std::string_view x_label, std::string_view y_label, bool autoscale_x, bool autoscale_y) {
     const std::string x(x_label);
     const std::string y(y_label);

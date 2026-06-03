@@ -186,8 +186,13 @@ class ScriptedGuiBackend {
 
   void end_tab_item() {}
 
-  bool begin_plot(std::string_view) {
+  bool begin_plot(std::string_view id) {
+    current_plot_id_ = std::string(id);
     return true;
+  }
+
+  bool plot_clicked() {
+    return consume_click(current_plot_id_, current_plot_id_);
   }
 
   void setup_axes(std::string_view, std::string_view, bool, bool) {}
@@ -316,6 +321,7 @@ class ScriptedGuiBackend {
   std::array<float, 2> viewport_size_{1600.0f, 900.0f};
   std::array<float, 2> current_window_size_{1200.0f, 800.0f};
   std::string current_window_title_;
+  std::string current_plot_id_;
   std::optional<std::array<float, 2>> pending_window_size_;
   std::string focused_window_;
 };
