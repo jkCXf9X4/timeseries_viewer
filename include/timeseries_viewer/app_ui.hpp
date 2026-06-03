@@ -259,7 +259,8 @@ void render_analysis_windows(tsv::app::AppState& app, Ui& ui) {
             app.active_window = static_cast<int>(window_index);
           }
 
-          if (ui.begin_plot(std::string("plot##") + std::to_string(window_index) + "_" + std::to_string(tab_index))) {
+          const auto plot_size = ui.content_region_avail();
+          if (ui.begin_plot(std::string("plot##") + std::to_string(window_index) + "_" + std::to_string(tab_index), {plot_size[0], plot_size[1]})) {
             ui.setup_axes("time", "value", tab.autoscale_x, tab.autoscale_y);
             if (!tab.autoscale_x && tab.x_range.has_value()) {
               ui.setup_axis_limits("x", tab.x_range->at(0), tab.x_range->at(1));
@@ -279,7 +280,7 @@ void render_analysis_windows(tsv::app::AppState& app, Ui& ui) {
                 continue;
               }
               const auto& series = it->second;
-            if (series_cfg.visible && !series.time.empty() && !series.value.empty()) {
+              if (series_cfg.visible && !series.time.empty() && !series.value.empty()) {
                 ui.plot_line(tsv::app::plot_legend_label(series_cfg), series, series_cfg.color);
               }
             }

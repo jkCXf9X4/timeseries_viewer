@@ -75,6 +75,11 @@ struct ImGuiBackend {
     return {size.x, size.y};
   }
 
+  std::array<float, 2> content_region_avail() const {
+    const ImVec2 size = ImGui::GetContentRegionAvail();
+    return {size.x, size.y};
+  }
+
   bool begin_window(std::string_view title, std::string_view, std::uint32_t flags) {
     const std::string label(title);
     return ImGui::Begin(label.c_str(), nullptr, static_cast<ImGuiWindowFlags>(flags));
@@ -192,9 +197,9 @@ struct ImGuiBackend {
     ImGui::EndTabItem();
   }
 
-  bool begin_plot(std::string_view id) {
+  bool begin_plot(std::string_view id, std::array<float, 2> size) {
     const std::string plot_id(id);
-    return ImPlot::BeginPlot(plot_id.c_str(), ImVec2(-1, 360));
+    return ImPlot::BeginPlot(plot_id.c_str(), ImVec2(size[0], size[1]));
   }
 
   bool plot_clicked() const {

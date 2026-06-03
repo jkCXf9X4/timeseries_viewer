@@ -77,6 +77,10 @@ class ScriptedGuiBackend {
     return current_window_size_;
   }
 
+  std::array<float, 2> content_region_avail() const {
+    return current_window_size_;
+  }
+
   bool begin_window(std::string_view title, std::string_view, std::uint32_t) {
     current_window_title_ = std::string(title);
     window_titles.push_back(current_window_title_);
@@ -190,8 +194,9 @@ class ScriptedGuiBackend {
 
   void end_tab_item() {}
 
-  bool begin_plot(std::string_view id) {
+  bool begin_plot(std::string_view id, std::array<float, 2> size) {
     current_plot_id_ = std::string(id);
+    plot_size_log.push_back(size);
     return true;
   }
 
@@ -255,6 +260,7 @@ class ScriptedGuiBackend {
   std::vector<std::string> separator_log;
   std::vector<std::string> plot_labels;
   std::vector<std::array<double, 4>> plot_colors;
+  std::vector<std::array<float, 2>> plot_size_log;
 
  private:
   bool consume_click(std::string_view label, std::string_view id) {

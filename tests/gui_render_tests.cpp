@@ -166,6 +166,94 @@ TEST_CASE("Rendered GUI reload button refreshes cached source data", "[ui][reloa
   REQUIRE(app.status == "Reloaded data");
 }
 
+TEST_CASE("Rendered GUI save project button writes the selected project file", "[ui][project][save]") {
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_gui_render_tests");
+  const auto source = write_csv(temp_dir / "save_source.csv", {"time", "speed"}, 6, 1.0);
+  const auto project_file = temp_dir / "saved_project.json";
+
+  tsv::app::AppState app;
+  tsv::app::ensure_workspace_defaults(app);
+  tsv::app::open_source(app, source, "run", tsv::SourceKind::Csv);
+  tsv::app::rebuild_cache(app);
+
+  const auto src = std::find_if(app.sources.begin(), app.sources.end(), [&](const auto& item) {
+    return item.alias == "run";
+  });
+  REQUIRE(src != app.sources.end());
+
+  tsv::app::add_raw_series(app, *src, std::nullopt, "speed");
+  app.workspace.windows[0].tabs[0].title = "analysis";
+  app.workspace.point_budget = 1234;
+
+  tsv::test::ScriptedGuiBackend ui;
+  ui.set_save_project_dialog(project_file);
+  ui.click("save-project");
+  tsv::ui::render_app(app, ui);
+
+  REQUIRE(fs::exists(project_file));
+  REQUIRE(app.project_path == project_file);
+  REQUIRE(app.status == "Saved project");
+
+  const auto project = tsv::load_project(project_file);
+  REQUIRE(project.sources.size() == 1);
+  REQUIRE(project.sources[0].alias == "run");
+  REQUIRE(project.sources[0].selected_variables.size() == 1);
+  REQUIRE(project.sources[0].selected_variables[0] == "run.speed");
+  REQUIRE(project.workspace.point_budget == 1234);
+  REQUIRE(project.workspace.windows[0].tabs[0].title == "analysis");
+}
+
+TEST_CASE("Rendered GUI open project button restores a saved workspace", "[ui][project][open]") {
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_gui_render_tests");
+  const auto source_a = write_csv(temp_dir / "open_a.csv", {"time", "speed"}, 5, 1.0);
+  const auto source_b = write_csv(temp_dir / "open_b.csv", {"time", "altitude"}, 5, 2.0);
+  const auto project_file = temp_dir / "open_project.json";
+
+  {
+    tsv::app::AppState save_app;
+    tsv::app::ensure_workspace_defaults(save_app);
+    tsv::app::open_source(save_app, source_a, "run_a", tsv::SourceKind::Csv);
+    tsv::app::open_source(save_app, source_b, "run_b", tsv::SourceKind::Csv);
+    tsv::app::rebuild_cache(save_app);
+
+    const auto src_a = std::find_if(save_app.sources.begin(), save_app.sources.end(), [&](const auto& item) {
+      return item.alias == "run_a";
+    });
+    const auto src_b = std::find_if(save_app.sources.begin(), save_app.sources.end(), [&](const auto& item) {
+      return item.alias == "run_b";
+    });
+    REQUIRE(src_a != save_app.sources.end());
+    REQUIRE(src_b != save_app.sources.end());
+
+    tsv::app::add_raw_series(save_app, *src_a, std::nullopt, "speed");
+    save_app.workspace.windows[0].tabs[0].title = "comparison";
+    tsv::app::add_window(save_app, "Window 2");
+    tsv::app::add_tab(save_app, 1, "detail");
+    tsv::app::add_raw_series(save_app, *src_b, std::nullopt, "altitude");
+    save_app.workspace.point_budget = 2048;
+    tsv::app::save_project_file(save_app, project_file);
+  }
+
+  tsv::app::AppState app;
+  tsv::test::ScriptedGuiBackend ui;
+  ui.set_open_project_dialog(project_file);
+  ui.click("open-project");
+  tsv::ui::render_app(app, ui);
+
+  REQUIRE(app.project_path == project_file);
+  REQUIRE(app.status == "Loaded project");
+  REQUIRE(app.workspace.point_budget == 2048);
+  REQUIRE(app.sources.size() == 2);
+  REQUIRE(app.workspace.windows.size() == 2);
+  REQUIRE(app.workspace.windows[0].tabs[0].title == "comparison");
+  REQUIRE(app.workspace.windows[0].tabs[0].series.size() == 1);
+  REQUIRE(app.workspace.windows[0].tabs[0].series[0].name == "run_a.speed");
+  REQUIRE(app.workspace.windows[1].tabs[0].series.size() == 0);
+  REQUIRE(app.workspace.windows[1].tabs[1].title == "detail");
+  REQUIRE(app.workspace.windows[1].tabs[1].series.size() == 1);
+  REQUIRE(app.workspace.windows[1].tabs[1].series[0].name == "run_b.altitude");
+}
+
 TEST_CASE("Rendered variable browsing keeps parent nodes navigation-only and scales with many parameters", "[ui][browser]") {
   const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_gui_render_tests");
   std::vector<std::string> headers = {"time"};
@@ -288,6 +376,12 @@ TEST_CASE("Rendered UI pins the parameter browser left and the plot inspector ri
   }));
   REQUIRE(std::any_of(ui.window_size_log.begin(), ui.window_size_log.end(), [](const auto& item) {
     return item.first == "Plot Inspector" && item.second[0] == Catch::Approx(420.0f) && item.second[1] == Catch::Approx(720.0f);
+  }));
+  REQUIRE(std::any_of(ui.plot_size_log.begin(), ui.plot_size_log.end(), [](const auto& item) {
+    return item[0] == Catch::Approx(1200.0f) && item[1] == Catch::Approx(900.0f);
+  }));
+  REQUIRE(std::any_of(ui.plot_size_log.begin(), ui.plot_size_log.end(), [](const auto& item) {
+    return item[0] == Catch::Approx(1200.0f) && item[1] == Catch::Approx(720.0f);
   }));
   REQUIRE(std::count(ui.separator_log.begin(), ui.separator_log.end(), "Active Plot") == 2);
   REQUIRE(app.workspace.point_budget == 1024);
