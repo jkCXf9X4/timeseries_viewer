@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -13,6 +14,8 @@ namespace tsv::ui {
 namespace detail {
 
 constexpr std::uint32_t kFixedSidebarFlags = 0x1u | 0x4u | 0x10u;
+constexpr std::uint32_t kStatusBarFlags = 0x1u | 0x4u | 0x10u;
+constexpr float kStatusBarHeight = 28.0f;
 
 template <typename Ui>
 void render_active_plot_summary(tsv::app::AppState& app, Ui& ui) {
@@ -160,7 +163,8 @@ template <typename Ui>
 void render_parameter_panel(tsv::app::AppState& app, Ui& ui) {
   tsv::app::ensure_workspace_defaults(app);
   const auto viewport = ui.viewport_size();
-  ui.set_next_window_size(app.parameter_panel_width, viewport[1]);
+  const float body_height = std::max(0.0f, viewport[1] - kStatusBarHeight);
+  ui.set_next_window_size(app.parameter_panel_width, body_height);
   ui.set_next_window_pos(0.0f, 0.0f);
   if (!ui.begin_window("Parameters", "parameters-window", kFixedSidebarFlags)) {
     return;
@@ -224,9 +228,20 @@ void render_parameter_panel(tsv::app::AppState& app, Ui& ui) {
       ui.text(name + ": " + error);
     }
   }
+  app.parameter_panel_width = ui.window_size()[0];
+  ui.end_window();
+}
+
+template <typename Ui>
+void render_status_bar(tsv::app::AppState& app, Ui& ui) {
+  const auto viewport = ui.viewport_size();
+  ui.set_next_window_size(viewport[0], kStatusBarHeight);
+  ui.set_next_window_pos(0.0f, viewport[1] - kStatusBarHeight);
+  if (!ui.begin_window("Status", "status-bar", kStatusBarFlags)) {
+    return;
+  }
 
   ui.text(app.status);
-  app.parameter_panel_width = ui.window_size()[0];
   ui.end_window();
 }
 
@@ -301,7 +316,8 @@ template <typename Ui>
 void render_plot_inspector_panel(tsv::app::AppState& app, Ui& ui) {
   tsv::app::ensure_workspace_defaults(app);
   const auto viewport = ui.viewport_size();
-  ui.set_next_window_size(app.plot_inspector_width, viewport[1]);
+  const float body_height = std::max(0.0f, viewport[1] - kStatusBarHeight);
+  ui.set_next_window_size(app.plot_inspector_width, body_height);
   const auto x = viewport[0] - app.plot_inspector_width;
   ui.set_next_window_pos(x, 0.0f);
   if (!ui.begin_window("Plot Inspector", "plot-inspector-window", kFixedSidebarFlags)) {
@@ -320,6 +336,7 @@ void render_app(tsv::app::AppState& app, Ui& ui) {
   detail::render_analysis_windows(app, ui);
   detail::render_parameter_panel(app, ui);
   detail::render_plot_inspector_panel(app, ui);
+  detail::render_status_bar(app, ui);
   app.sidebar_layout_initialized = true;
 }
 

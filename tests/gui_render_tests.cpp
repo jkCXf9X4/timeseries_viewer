@@ -366,22 +366,31 @@ TEST_CASE("Rendered UI pins the parameter browser left and the plot inspector ri
   tsv::ui::render_app(app, ui);
 
   REQUIRE(std::any_of(ui.window_size_log.begin(), ui.window_size_log.end(), [](const auto& item) {
-    return item.first == "Parameters" && item.second[0] == Catch::Approx(360.0f) && item.second[1] == Catch::Approx(900.0f);
+    return item.first == "Parameters" && item.second[0] == Catch::Approx(360.0f) && item.second[1] == Catch::Approx(872.0f);
   }));
   REQUIRE(std::any_of(ui.window_size_log.begin(), ui.window_size_log.end(), [](const auto& item) {
-    return item.first == "Plot Inspector" && item.second[0] == Catch::Approx(420.0f) && item.second[1] == Catch::Approx(900.0f);
+    return item.first == "Plot Inspector" && item.second[0] == Catch::Approx(420.0f) && item.second[1] == Catch::Approx(872.0f);
   }));
   REQUIRE(std::any_of(ui.window_size_log.begin(), ui.window_size_log.end(), [](const auto& item) {
-    return item.first == "Parameters" && item.second[0] == Catch::Approx(360.0f) && item.second[1] == Catch::Approx(720.0f);
+    return item.first == "Parameters" && item.second[0] == Catch::Approx(360.0f) && item.second[1] == Catch::Approx(692.0f);
   }));
   REQUIRE(std::any_of(ui.window_size_log.begin(), ui.window_size_log.end(), [](const auto& item) {
-    return item.first == "Plot Inspector" && item.second[0] == Catch::Approx(420.0f) && item.second[1] == Catch::Approx(720.0f);
+    return item.first == "Plot Inspector" && item.second[0] == Catch::Approx(420.0f) && item.second[1] == Catch::Approx(692.0f);
   }));
   REQUIRE(std::any_of(ui.plot_size_log.begin(), ui.plot_size_log.end(), [](const auto& item) {
     return item[0] == Catch::Approx(1200.0f) && item[1] == Catch::Approx(900.0f);
   }));
   REQUIRE(std::any_of(ui.plot_size_log.begin(), ui.plot_size_log.end(), [](const auto& item) {
     return item[0] == Catch::Approx(1200.0f) && item[1] == Catch::Approx(720.0f);
+  }));
+  REQUIRE(std::any_of(ui.window_pos_log.begin(), ui.window_pos_log.end(), [](const auto& item) {
+    return item.first == "Status" && item.second[0] == Catch::Approx(0.0f) && item.second[1] == Catch::Approx(872.0f);
+  }));
+  REQUIRE(std::any_of(ui.window_pos_log.begin(), ui.window_pos_log.end(), [](const auto& item) {
+    return item.first == "Status" && item.second[0] == Catch::Approx(0.0f) && item.second[1] == Catch::Approx(692.0f);
+  }));
+  REQUIRE(std::any_of(ui.window_size_log.begin(), ui.window_size_log.end(), [](const auto& item) {
+    return item.first == "Status" && item.second[0] == Catch::Approx(1600.0f) && item.second[1] == Catch::Approx(28.0f);
   }));
   REQUIRE(std::count(ui.separator_log.begin(), ui.separator_log.end(), "Active Plot") == 2);
   REQUIRE(app.workspace.point_budget == 1024);

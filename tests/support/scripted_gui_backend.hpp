@@ -63,7 +63,9 @@ class ScriptedGuiBackend {
     save_project_path_ = std::move(path);
   }
 
-  void set_next_window_pos(float, float) {}
+  void set_next_window_pos(float x, float y) {
+    pending_window_pos_ = std::array<float, 2>{x, y};
+  }
 
   void set_next_window_size(float width, float height) {
     pending_window_size_ = std::array<float, 2>{width, height};
@@ -84,6 +86,12 @@ class ScriptedGuiBackend {
   bool begin_window(std::string_view title, std::string_view, std::uint32_t) {
     current_window_title_ = std::string(title);
     window_titles.push_back(current_window_title_);
+    if (pending_window_pos_.has_value()) {
+      current_window_pos_ = *pending_window_pos_;
+      pending_window_pos_.reset();
+    } else {
+      current_window_pos_ = {0.0f, 0.0f};
+    }
     if (pending_window_size_.has_value()) {
       current_window_size_ = *pending_window_size_;
       pending_window_size_.reset();
@@ -91,10 +99,13 @@ class ScriptedGuiBackend {
       current_window_size_ = {360.0f, viewport_size_[1]};
     } else if (current_window_title_ == "Plot Inspector") {
       current_window_size_ = {420.0f, viewport_size_[1]};
+    } else if (current_window_title_ == "Status") {
+      current_window_size_ = {viewport_size_[0], 28.0f};
     } else {
       current_window_size_ = {1200.0f, viewport_size_[1]};
     }
     window_size_log.push_back({current_window_title_, current_window_size_});
+    window_pos_log.push_back({current_window_title_, current_window_pos_});
     return true;
   }
 
@@ -255,6 +266,7 @@ class ScriptedGuiBackend {
 
   std::vector<std::string> window_titles;
   std::vector<std::pair<std::string, std::array<float, 2>>> window_size_log;
+  std::vector<std::pair<std::string, std::array<float, 2>>> window_pos_log;
   std::vector<std::string> text_log;
   std::vector<std::string> text_disabled_log;
   std::vector<std::string> separator_log;
@@ -332,9 +344,11 @@ class ScriptedGuiBackend {
   std::optional<fs::path> save_project_path_;
   std::array<float, 2> viewport_size_{1600.0f, 900.0f};
   std::array<float, 2> current_window_size_{1200.0f, 800.0f};
+  std::array<float, 2> current_window_pos_{0.0f, 0.0f};
   std::string current_window_title_;
   std::string current_plot_id_;
   std::optional<std::array<float, 2>> pending_window_size_;
+  std::optional<std::array<float, 2>> pending_window_pos_;
   std::string focused_window_;
 };
 
