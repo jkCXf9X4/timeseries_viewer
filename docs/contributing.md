@@ -9,7 +9,7 @@
 
 ## Project Layout
 
-- `include/timeseries_viewer/core.hpp`: core data model, import, expression, and persistence helpers
+- `src/timeseries_viewer/core.hpp`: core data model, import, expression, and persistence helpers
 - `src/app/main.cpp`: GUI shell and application flow
 - `src/third_party/imgui/backends/`: vendored Dear ImGui backend glue
 - `tests/core_tests.cpp`: Catch2 coverage for the verification plan

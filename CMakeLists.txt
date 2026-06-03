@@ -17,7 +17,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 add_library(timeseries_core INTERFACE)
-target_include_directories(timeseries_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(timeseries_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(SQLite3 REQUIRED)
@@ -31,7 +31,7 @@ add_library(timeseries_app_model STATIC
   src/app/app_model.cpp
 )
 target_link_libraries(timeseries_app_model PUBLIC timeseries_core)
-target_include_directories(timeseries_app_model PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(timeseries_app_model PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 if(TSV_BUILD_APP)
   find_package(OpenGL REQUIRED)
