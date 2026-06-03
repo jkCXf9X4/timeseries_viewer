@@ -227,6 +227,7 @@ void add_window(AppState& app, std::string title) {
   window.tabs.push_back(PlotTabConfig{});
   app.workspace.windows.push_back(std::move(window));
   app.active_window = static_cast<int>(app.workspace.windows.size()) - 1;
+  app.layout_refresh_requested = true;
 }
 
 void add_tab(AppState& app, std::size_t window_index, std::string title) {
@@ -237,6 +238,7 @@ void add_tab(AppState& app, std::size_t window_index, std::string title) {
   window.tabs.push_back(std::move(tab));
   window.active_tab = window.tabs.size() - 1;
   app.active_window = static_cast<int>(window_index);
+  app.layout_refresh_requested = true;
 }
 
 void select_series(AppState& app, std::size_t window_index, std::size_t tab_index, std::size_t series_index) {
@@ -287,6 +289,7 @@ void open_source(AppState& app, const fs::path& path, const std::optional<std::s
     source.last_write_time = fs::last_write_time(path, ec);
     app.sources.push_back(std::move(source));
     app.status = "Opened " + path.filename().string();
+    app.layout_refresh_requested = true;
   } catch (const std::exception& ex) {
     app.status = ex.what();
   }
@@ -719,6 +722,7 @@ void load_project_file(AppState& app, const fs::path& path) {
     ensure_workspace_defaults(app);
     app.project_path = path;
     app.status = "Loaded project";
+    app.layout_refresh_requested = true;
     rebuild_cache(app);
   } catch (const std::exception& ex) {
     app.status = ex.what();

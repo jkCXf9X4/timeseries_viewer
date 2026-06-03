@@ -1,4 +1,5 @@
 #include <array>
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -32,6 +33,7 @@
 
 #include "timeseries_viewer/app_model.hpp"
 #include "timeseries_viewer/app_ui.hpp"
+#include "timeseries_viewer/nfd_dialog_helpers.hpp"
 
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -61,8 +63,20 @@ struct ImGuiBackend {
     ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always);
   }
 
+  void set_next_window_pos_appearing(float x, float y) {
+    ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Appearing);
+  }
+
   void set_next_window_size(float width, float height) {
     ImGui::SetNextWindowSize(ImVec2(width, height), ImGuiCond_Always);
+  }
+
+  void set_next_window_size_appearing(float width, float height) {
+    ImGui::SetNextWindowSize(ImVec2(width, height), ImGuiCond_Appearing);
+  }
+
+  void set_next_window_focus() {
+    ImGui::SetNextWindowFocus();
   }
 
   std::array<float, 2> viewport_size() const {
@@ -197,6 +211,14 @@ struct ImGuiBackend {
     return ImPlot::BeginPlot(plot_id.c_str(), ImVec2(-1, 360));
   }
 
+  bool plot_clicked() const {
+    return ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+  }
+
+  void focus_window() {
+    ImGui::SetWindowFocus();
+  }
+
   void setup_axes(std::string_view x_label, std::string_view y_label, bool autoscale_x, bool autoscale_y) {
     const std::string x(x_label);
     const std::string y(y_label);
@@ -282,15 +304,11 @@ struct ImGuiBackend {
     const nfdu8filteritem_t filters[] = {
       {"Time series", "csv,sqlite,db"}
     };
-    const auto parent_window = native_parent_window();
-    const nfdopendialogu8args_t args{
-      filters,
-      1,
-      nullptr,
-      parent_window.has_value() ? parent_window.value() : nfdwindowhandle_t{}
-    };
-    const auto result = NFD_OpenDialogU8_With(&out_path, &args);
+    const auto result = NFD_OpenDialogU8(&out_path, filters, 1, nullptr);
     if (result != NFD_OKAY) {
+      if (result == NFD_ERROR) {
+        std::fprintf(stderr, "Open source dialog failed: %s\n", NFD_GetError());
+      }
       return std::nullopt;
     }
     fs::path path(reinterpret_cast<const char*>(out_path));
@@ -303,15 +321,11 @@ struct ImGuiBackend {
     const nfdu8filteritem_t filters[] = {
       {"Project", "json"}
     };
-    const auto parent_window = native_parent_window();
-    const nfdopendialogu8args_t args{
-      filters,
-      1,
-      nullptr,
-      parent_window.has_value() ? parent_window.value() : nfdwindowhandle_t{}
-    };
-    const auto result = NFD_OpenDialogU8_With(&out_path, &args);
+    const auto result = NFD_OpenDialogU8(&out_path, filters, 1, nullptr);
     if (result != NFD_OKAY) {
+      if (result == NFD_ERROR) {
+        std::fprintf(stderr, "Open project dialog failed: %s\n", NFD_GetError());
+      }
       return std::nullopt;
     }
     fs::path path(reinterpret_cast<const char*>(out_path));
@@ -324,16 +338,11 @@ struct ImGuiBackend {
     const nfdu8filteritem_t filters[] = {
       {"Project", "json"}
     };
-    const auto parent_window = native_parent_window();
-    const nfdsavedialogu8args_t args{
-      filters,
-      1,
-      nullptr,
-      nullptr,
-      parent_window.has_value() ? parent_window.value() : nfdwindowhandle_t{}
-    };
-    const auto result = NFD_SaveDialogU8_With(&out_path, &args);
+    const auto result = NFD_SaveDialogU8(&out_path, filters, 1, nullptr, nullptr);
     if (result != NFD_OKAY) {
+      if (result == NFD_ERROR) {
+        std::fprintf(stderr, "Save project dialog failed: %s\n", NFD_GetError());
+      }
       return std::nullopt;
     }
     fs::path path(reinterpret_cast<const char*>(out_path));
@@ -341,6 +350,136 @@ struct ImGuiBackend {
     return path;
   }
 };
+
+struct NativeAnalysisWindow {
+  std::size_t workspace_index = 0;
+  GLFWwindow* window = nullptr;
+  ImGuiContext* imgui_context = nullptr;
+  ImPlotContext* implot_context = nullptr;
+  ImGuiBackend ui;
+
+  bool create(GLFWwindow* shared_context, const std::string& title) {
+    window = glfwCreateWindow(1100, 720, title.c_str(), nullptr, shared_context);
+    if (window == nullptr) {
+      return false;
+    }
+
+    glfwMakeContextCurrent(window);
+    glfwSwapInterval(1);
+
+    imgui_context = ImGui::CreateContext();
+    ImGui::SetCurrentContext(imgui_context);
+    implot_context = ImPlot::CreateContext();
+    ImPlot::SetCurrentContext(implot_context);
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init("#version 330");
+    ui.set_parent_window(window);
+    return true;
+  }
+
+  void destroy() {
+    if (imgui_context != nullptr) {
+      ImGui::SetCurrentContext(imgui_context);
+      ImPlot::SetCurrentContext(implot_context);
+      ImGui_ImplOpenGL3_Shutdown();
+      ImGui_ImplGlfw_Shutdown();
+      ImPlot::DestroyContext(implot_context);
+      ImGui::DestroyContext(imgui_context);
+      implot_context = nullptr;
+      imgui_context = nullptr;
+    }
+    if (window != nullptr) {
+      glfwDestroyWindow(window);
+      window = nullptr;
+    }
+  }
+};
+
+bool native_window_closed(const std::vector<std::size_t>& closed_indices, std::size_t index) {
+  return std::find(closed_indices.begin(), closed_indices.end(), index) != closed_indices.end();
+}
+
+void sync_native_analysis_windows(
+  tsv::app::AppState& app,
+  GLFWwindow* main_window,
+  ImGuiContext* main_imgui_context,
+  ImPlotContext* main_implot_context,
+  std::vector<NativeAnalysisWindow>& native_windows,
+  std::vector<std::size_t>& closed_indices
+) {
+  tsv::app::ensure_workspace_defaults(app);
+  closed_indices.erase(
+    std::remove_if(closed_indices.begin(), closed_indices.end(), [&](std::size_t index) {
+      return index >= app.workspace.windows.size();
+    }),
+    closed_indices.end()
+  );
+
+  native_windows.erase(
+    std::remove_if(native_windows.begin(), native_windows.end(), [&](NativeAnalysisWindow& native_window) {
+      if (native_window.workspace_index < app.workspace.windows.size() && !glfwWindowShouldClose(native_window.window)) {
+        glfwSetWindowTitle(native_window.window, app.workspace.windows[native_window.workspace_index].title.c_str());
+        return false;
+      }
+      closed_indices.push_back(native_window.workspace_index);
+      native_window.destroy();
+      return true;
+    }),
+    native_windows.end()
+  );
+
+  for (std::size_t window_index = 1; window_index < app.workspace.windows.size(); ++window_index) {
+    if (native_window_closed(closed_indices, window_index)) {
+      continue;
+    }
+    const auto existing = std::find_if(native_windows.begin(), native_windows.end(), [&](const NativeAnalysisWindow& native_window) {
+      return native_window.workspace_index == window_index;
+    });
+    if (existing != native_windows.end()) {
+      continue;
+    }
+
+    NativeAnalysisWindow native_window;
+    native_window.workspace_index = window_index;
+    if (native_window.create(main_window, app.workspace.windows[window_index].title)) {
+      native_windows.push_back(std::move(native_window));
+    }
+  }
+
+  glfwMakeContextCurrent(main_window);
+  ImGui::SetCurrentContext(main_imgui_context);
+  ImPlot::SetCurrentContext(main_implot_context);
+}
+
+void render_native_analysis_windows(tsv::app::AppState& app, std::vector<NativeAnalysisWindow>& native_windows) {
+  for (auto& native_window : native_windows) {
+    if (native_window.window == nullptr || native_window.workspace_index >= app.workspace.windows.size()) {
+      continue;
+    }
+
+    glfwMakeContextCurrent(native_window.window);
+    ImGui::SetCurrentContext(native_window.imgui_context);
+    ImPlot::SetCurrentContext(native_window.implot_context);
+    native_window.ui.set_parent_window(native_window.window);
+
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    tsv::ui::render_native_analysis_window(app, native_window.ui, native_window.workspace_index);
+
+    ImGui::Render();
+    int display_w = 0;
+    int display_h = 0;
+    glfwGetFramebufferSize(native_window.window, &display_w, &display_h);
+    glViewport(0, 0, display_w, display_h);
+    glClearColor(0.12f, 0.12f, 0.12f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    glfwSwapBuffers(native_window.window);
+  }
+}
 
 } // namespace
 
@@ -375,8 +514,10 @@ int main() {
   }
 
   IMGUI_CHECKVERSION();
-  ImGui::CreateContext();
-  ImPlot::CreateContext();
+  ImGuiContext* main_imgui_context = ImGui::CreateContext();
+  ImGui::SetCurrentContext(main_imgui_context);
+  ImPlotContext* main_implot_context = ImPlot::CreateContext();
+  ImPlot::SetCurrentContext(main_implot_context);
 
   ImGui::StyleColorsDark();
   ImGui_ImplGlfw_InitForOpenGL(window, true);
@@ -388,16 +529,31 @@ int main() {
 
   ImGuiBackend ui;
   ui.set_parent_window(window);
+  std::vector<NativeAnalysisWindow> native_windows;
+  std::vector<std::size_t> closed_native_window_indices;
 
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
     tsv::app::poll_live_reload(app);
 
+    sync_native_analysis_windows(
+      app,
+      window,
+      main_imgui_context,
+      main_implot_context,
+      native_windows,
+      closed_native_window_indices
+    );
+
+    glfwMakeContextCurrent(window);
+    ImGui::SetCurrentContext(main_imgui_context);
+    ImPlot::SetCurrentContext(main_implot_context);
+    ui.set_parent_window(window);
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    tsv::ui::render_app(app, ui);
+    tsv::ui::render_main_native_app(app, ui);
 
     ImGui::Render();
     int display_w = 0;
@@ -408,12 +564,29 @@ int main() {
     glClear(GL_COLOR_BUFFER_BIT);
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     glfwSwapBuffers(window);
+
+    sync_native_analysis_windows(
+      app,
+      window,
+      main_imgui_context,
+      main_implot_context,
+      native_windows,
+      closed_native_window_indices
+    );
+    render_native_analysis_windows(app, native_windows);
   }
 
+  for (auto& native_window : native_windows) {
+    native_window.destroy();
+  }
+  native_windows.clear();
+  glfwMakeContextCurrent(window);
+  ImGui::SetCurrentContext(main_imgui_context);
+  ImPlot::SetCurrentContext(main_implot_context);
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplGlfw_Shutdown();
-  ImPlot::DestroyContext();
-  ImGui::DestroyContext();
+  ImPlot::DestroyContext(main_implot_context);
+  ImGui::DestroyContext(main_imgui_context);
 
   glfwDestroyWindow(window);
   glfwTerminate();
