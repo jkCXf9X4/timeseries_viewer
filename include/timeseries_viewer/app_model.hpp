@@ -94,6 +94,29 @@ void add_derived_series_to_tab(AppState& app, std::size_t window_index, std::siz
 [[nodiscard]] tsv::TreeNode build_bindable_parameter_tree(const OpenSource& source);
 [[nodiscard]] std::optional<BindableParameter> find_bindable_parameter(const OpenSource& source, const std::string& display_name);
 [[nodiscard]] std::string plot_legend_label(const tsv::PlotSeriesConfig& series);
+[[nodiscard]] bool parameter_is_selected(
+  const tsv::PlotTabConfig& tab,
+  const OpenSource& source,
+  const std::optional<std::string>& table_name,
+  const std::string& value_column
+);
+std::size_t remove_parameter_series(
+  AppState& app,
+  std::size_t window_index,
+  std::size_t tab_index,
+  const OpenSource& source,
+  const std::optional<std::string>& table_name,
+  const std::string& value_column
+);
+void set_parameter_selected(
+  AppState& app,
+  std::size_t window_index,
+  std::size_t tab_index,
+  const OpenSource& source,
+  const std::optional<std::string>& table_name,
+  const std::string& value_column,
+  bool selected
+);
 
 void save_project_file(AppState& app, const fs::path& path);
 void load_project_file(AppState& app, const fs::path& path);

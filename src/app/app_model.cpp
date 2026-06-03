@@ -505,6 +505,35 @@ void add_derived_series_to_tab(AppState& app, std::size_t window_index, std::siz
   }
 }
 
+namespace {
+
+bool series_matches_binding(
+  const tsv::PlotSeriesConfig& series,
+  const OpenSource& source,
+  const std::optional<std::string>& table_name,
+  const std::string& value_column
+) {
+  if (series.derived) {
+    return false;
+  }
+
+  if (series.source_path.has_value()) {
+    if (*series.source_path != source.catalog.path.string()) {
+      return false;
+    }
+  } else if (series.source_alias.has_value()) {
+    if (*series.source_alias != source.alias) {
+      return false;
+    }
+  } else {
+    return false;
+  }
+
+  return series.table_name == table_name && series.value_column.has_value() && *series.value_column == value_column;
+}
+
+} // namespace
+
 std::vector<BindableParameter> list_bindable_parameters(const OpenSource& source) {
   std::vector<BindableParameter> parameters;
   for (const auto& table : source.catalog.tables) {
@@ -570,6 +599,66 @@ std::string plot_legend_label(const tsv::PlotSeriesConfig& series) {
     label += " (" + fs::path(*series.source_path).filename().string() + ")";
   }
   return label;
+}
+
+bool parameter_is_selected(
+  const tsv::PlotTabConfig& tab,
+  const OpenSource& source,
+  const std::optional<std::string>& table_name,
+  const std::string& value_column
+) {
+  return std::any_of(tab.series.begin(), tab.series.end(), [&](const tsv::PlotSeriesConfig& series) {
+    return series_matches_binding(series, source, table_name, value_column);
+  });
+}
+
+std::size_t remove_parameter_series(
+  AppState& app,
+  std::size_t window_index,
+  std::size_t tab_index,
+  const OpenSource& source,
+  const std::optional<std::string>& table_name,
+  const std::string& value_column
+) {
+  auto& tab = app.workspace.windows.at(window_index).tabs.at(tab_index);
+  const auto before = tab.series.size();
+  tab.series.erase(std::remove_if(tab.series.begin(), tab.series.end(), [&](const tsv::PlotSeriesConfig& series) {
+    return series_matches_binding(series, source, table_name, value_column);
+  }), tab.series.end());
+
+  if (tab.series.empty()) {
+    tab.active_series_index = 0;
+  } else if (tab.active_series_index >= tab.series.size()) {
+    tab.active_series_index = tab.series.size() - 1;
+  }
+
+  if (tab.series.size() != before) {
+    rebuild_cache(app);
+  }
+
+  return before - tab.series.size();
+}
+
+void set_parameter_selected(
+  AppState& app,
+  std::size_t window_index,
+  std::size_t tab_index,
+  const OpenSource& source,
+  const std::optional<std::string>& table_name,
+  const std::string& value_column,
+  bool selected
+) {
+  const auto is_selected = parameter_is_selected(app.workspace.windows.at(window_index).tabs.at(tab_index), source, table_name, value_column);
+  if (selected == is_selected) {
+    return;
+  }
+
+  if (selected) {
+    add_raw_series(app, source, table_name, value_column);
+    return;
+  }
+
+  remove_parameter_series(app, window_index, tab_index, source, table_name, value_column);
 }
 
 void save_project_file(AppState& app, const fs::path& path) {

@@ -7,8 +7,9 @@
 3. Select a CSV file or SQLite database.
 4. Expand the source tree to browse tables and variables.
 5. Use the dotted-name tree to drill into nested variable groups.
-6. Select a non-time variable to add it to the active plot tab.
-7. Select an existing series first if you want the source browser to rebind that series instead of adding a new one.
+6. Tick the checkbox next to a non-time variable to add it to the active plot tab.
+7. Clear the checkbox to remove that variable from the active plot tab.
+8. Select an existing series first if you want the source browser to rebind that series instead of adding a new one.
 
 ## Compare Sources
 

@@ -89,12 +89,12 @@ TEST_CASE("Rendered GUI workflow can open sources, browse parameters, bind, and 
   tsv::ui::render_app(app, ui);
   REQUIRE(app.workspace.windows[1].tabs.size() == 2);
 
-  ui.click("run_a.ECS_HW.consumerFeed.hh");
+  ui.set_checkbox("run_a.ECS_HW.consumerFeed.hh::selected", true);
   tsv::ui::render_app(app, ui);
   REQUIRE(app.workspace.windows[1].tabs[1].series.size() == 1);
   REQUIRE(app.workspace.windows[1].tabs[1].series[0].name == "run_a.ECS_HW.consumerFeed.hh");
 
-  ui.click("run_b.ECS_HW.consumerFeed.hh");
+  ui.set_checkbox("run_b.ECS_HW.consumerFeed.hh::selected", true);
   tsv::ui::render_app(app, ui);
   REQUIRE(app.workspace.windows[1].tabs[1].series.size() == 2);
   REQUIRE(app.workspace.windows[1].tabs[1].series[1].name == "run_b.ECS_HW.consumerFeed.hh");
@@ -173,10 +173,14 @@ TEST_CASE("Rendered variable browsing keeps parent nodes navigation-only and sca
   tsv::ui::render_app(app, ui);
   REQUIRE(app.workspace.windows[0].tabs[0].series.empty());
 
-  ui.click("dotted.ECS_HW.node17.signal");
+  ui.set_checkbox("dotted.ECS_HW.node17.signal::selected", true);
   tsv::ui::render_app(app, ui);
   REQUIRE(app.workspace.windows[0].tabs[0].series.size() == 1);
   REQUIRE(app.workspace.windows[0].tabs[0].series[0].name == "dotted.ECS_HW.node17.signal");
+
+  ui.set_checkbox("dotted.ECS_HW.node17.signal::selected", false);
+  tsv::ui::render_app(app, ui);
+  REQUIRE(app.workspace.windows[0].tabs[0].series.empty());
 }
 
 TEST_CASE("Rendered plot labels remain distinct for similar series names", "[ui][labels]") {
@@ -191,9 +195,9 @@ TEST_CASE("Rendered plot labels remain distinct for similar series names", "[ui]
   tsv::app::rebuild_cache(app);
 
   tsv::test::ScriptedGuiBackend ui;
-  ui.click("run_a.speed");
+  ui.set_checkbox("run_a.speed::selected", true);
   tsv::ui::render_app(app, ui);
-  ui.click("run_b.speed");
+  ui.set_checkbox("run_b.speed::selected", true);
   tsv::ui::render_app(app, ui);
 
   REQUIRE(app.workspace.windows[0].tabs[0].series.size() == 2);

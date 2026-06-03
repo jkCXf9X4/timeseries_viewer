@@ -24,9 +24,10 @@ void render_parameter_tree(tsv::app::AppState& app, Ui& ui, const tsv::app::Open
 
     const auto selected_series_index = tab.active_series_index;
     const bool can_bind = selected_series_index < tab.series.size() && !tab.series[selected_series_index].derived;
+    bool selected = tsv::app::parameter_is_selected(tab, source, binding->table_name, binding->value_column);
 
-    if (ui.selectable(node.label, false, node.full_name)) {
-      tsv::app::add_raw_series(app, source, binding->table_name, binding->value_column);
+    if (ui.checkbox(node.label, selected, node.full_name + "::selected")) {
+      tsv::app::set_parameter_selected(app, window_index, tab_index, source, binding->table_name, binding->value_column, selected);
     }
 
     if (can_bind && ui.small_button("Bind selected", node.full_name + "::bind")) {

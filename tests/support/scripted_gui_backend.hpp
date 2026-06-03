@@ -69,9 +69,16 @@ class ScriptedGuiBackend {
   }
 
   bool checkbox(std::string_view label, bool& value, std::string_view id) {
-    if (const auto target = lookup_bool(label, id); target.has_value() && *target != value) {
-      value = *target;
-      return true;
+    const std::string key = id.empty() ? std::string(label) : std::string(id);
+    const auto it = checkbox_values_.find(key);
+    if (it != checkbox_values_.end()) {
+      const bool target = it->second;
+      checkbox_values_.erase(it);
+      if (target != value) {
+        value = target;
+        return true;
+      }
+      return false;
     }
     return false;
   }
@@ -202,10 +209,6 @@ class ScriptedGuiBackend {
     }
 
     return false;
-  }
-
-  std::optional<bool> lookup_bool(std::string_view label, std::string_view id) const {
-    return lookup_value(checkbox_values_, label, id);
   }
 
   std::optional<std::string> lookup_text(std::string_view label, std::string_view id) const {
