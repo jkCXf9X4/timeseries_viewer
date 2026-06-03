@@ -656,6 +656,173 @@ bool series_matches_binding(
   return series.table_name == table_name && series.value_column.has_value() && *series.value_column == value_column;
 }
 
+bool series_matches_source(const tsv::PlotSeriesConfig& series, const OpenSource& source) {
+  if (series.derived) {
+    return false;
+  }
+
+  if (series.source_path.has_value()) {
+    return *series.source_path == source.catalog.path.string();
+  }
+
+  if (series.source_alias.has_value()) {
+    return *series.source_alias == source.alias;
+  }
+
+  return false;
+}
+
+std::set<std::string> collect_derived_series_names(const AppState& app) {
+  std::set<std::string> names;
+  for (const auto& window : app.workspace.windows) {
+    for (const auto& tab : window.tabs) {
+      for (const auto& series_cfg : tab.series) {
+        if (series_cfg.derived && !series_cfg.name.empty()) {
+          names.insert(series_cfg.name);
+        }
+      }
+    }
+  }
+  return names;
+}
+
+void erase_series_cache_entries(AppState& app, const std::set<std::string>& names) {
+  for (const auto& name : names) {
+    app.series_cache.erase(name);
+    app.series_errors.erase(name);
+  }
+}
+
+void populate_registry_from_raw_series(AppState& app, tsv::SeriesRegistry& registry) {
+  for (const auto& window : app.workspace.windows) {
+    for (const auto& tab : window.tabs) {
+      for (const auto& series_cfg : tab.series) {
+        if (series_cfg.derived || series_cfg.name.empty()) {
+          continue;
+        }
+        const auto it = app.series_cache.find(series_cfg.name);
+        if (it != app.series_cache.end()) {
+          registry.set(it->second);
+        }
+      }
+    }
+  }
+}
+
+void refresh_live_source_cache(AppState& app, std::size_t source_index, tsv::SeriesRegistry& registry) {
+  auto& source = app.sources.at(source_index);
+  const auto budget = app.workspace.point_budget == 0 ? std::optional<std::size_t>{} : std::optional<std::size_t>{app.workspace.point_budget};
+
+  for (auto& window : app.workspace.windows) {
+    for (auto& tab : window.tabs) {
+      for (auto& series_cfg : tab.series) {
+        if (!series_matches_source(series_cfg, source)) {
+          continue;
+        }
+
+        const auto table = find_table(source.catalog, series_cfg.table_name);
+        const std::string series_name = series_cfg.name.empty()
+          ? make_series_name(source, series_cfg.table_name, series_cfg.value_column.value_or(""))
+          : series_cfg.name;
+
+        if (!table.has_value()) {
+          app.series_errors[series_name] = "Table not found";
+          app.series_cache.erase(series_name);
+          continue;
+        }
+        if (!series_cfg.value_column.has_value()) {
+          app.series_errors[series_name] = "Value column missing";
+          app.series_cache.erase(series_name);
+          continue;
+        }
+
+        if (series_cfg.name.empty()) {
+          series_cfg.name = series_name;
+        }
+
+        const auto resolved_time_column = series_cfg.time_column.has_value()
+          ? *series_cfg.time_column
+          : default_time_column(*table);
+
+        SeriesBindingKey key{source.catalog.path, series_cfg.table_name, resolved_time_column, *series_cfg.value_column};
+        auto& entry = app.raw_series_cache[key];
+        const auto current_stamp = source.last_write_time;
+        const bool cache_valid = entry.source_stamp.has_value()
+          && current_stamp.has_value()
+          && *entry.source_stamp == *current_stamp
+          && entry.max_points == budget;
+
+        if (!cache_valid) {
+          std::string error;
+          std::string time_column;
+          const auto series = load_raw_series(source, series_cfg.table_name, resolved_time_column, *series_cfg.value_column, error, time_column, budget);
+          if (!series.has_value()) {
+            app.series_errors[series_name] = error;
+            app.series_cache.erase(series_name);
+            continue;
+          }
+          entry.source_stamp = current_stamp;
+          entry.max_points = budget;
+          entry.series = *series;
+        }
+
+        entry.series.name = series_name;
+        entry.series.source_name = source.alias;
+        series_cfg.time_column = entry.series.time_column;
+        if (!series_cfg.source_alias.has_value()) {
+          series_cfg.source_alias = source.alias;
+        }
+        if (!series_cfg.source_path.has_value()) {
+          series_cfg.source_path = source.catalog.path.string();
+        }
+
+        app.series_cache[series_name] = entry.series;
+        registry.set(app.series_cache.at(series_name));
+        app.series_errors.erase(series_name);
+      }
+    }
+  }
+}
+
+void refresh_live_cache(AppState& app, const std::vector<std::size_t>& changed_source_indexes) {
+  ensure_workspace_defaults(app);
+
+  const auto derived_names = collect_derived_series_names(app);
+  erase_series_cache_entries(app, derived_names);
+
+  tsv::SeriesRegistry registry;
+  for (const auto source_index : changed_source_indexes) {
+    if (source_index < app.sources.size()) {
+      refresh_live_source_cache(app, source_index, registry);
+    }
+  }
+
+  populate_registry_from_raw_series(app, registry);
+
+  for (auto& window : app.workspace.windows) {
+    for (auto& tab : window.tabs) {
+      for (auto& series_cfg : tab.series) {
+        if (!series_cfg.derived) {
+          continue;
+        }
+        if (series_cfg.name.empty()) {
+          series_cfg.name = series_cfg.expression.empty() ? "derived" : series_cfg.expression;
+        }
+        try {
+          auto series = tsv::evaluate_expression(series_cfg.expression, registry);
+          series.name = series_cfg.name;
+          app.series_cache[series.name] = std::move(series);
+          registry.set(app.series_cache.at(series_cfg.name));
+          app.series_errors.erase(series_cfg.name);
+        } catch (const std::exception& ex) {
+          app.series_errors[series_cfg.name] = ex.what();
+          app.series_cache.erase(series_cfg.name);
+        }
+      }
+    }
+  }
+}
+
 } // namespace
 
 std::vector<BindableParameter> list_bindable_parameters(const OpenSource& source) {
@@ -844,7 +1011,7 @@ void load_project_file(AppState& app, const fs::path& path) {
 
 void reload_sources(AppState& app) {
   for (auto& source : app.sources) {
-    source.last_write_time = source_stamp(source.catalog.path, source.catalog.kind);
+    source.last_write_time.reset();
   }
 
   app.raw_series_cache.clear();
@@ -863,15 +1030,19 @@ void poll_live_reload(AppState& app) {
   app.last_poll = now;
 
   bool changed = false;
-  for (auto& source : app.sources) {
+  std::vector<std::size_t> changed_sources;
+  changed_sources.reserve(app.sources.size());
+  for (std::size_t index = 0; index < app.sources.size(); ++index) {
+    auto& source = app.sources[index];
     const auto current = source_stamp(source.catalog.path, source.catalog.kind);
     if (current.has_value() && current != source.last_write_time) {
       source.last_write_time = current;
       changed = true;
+      changed_sources.push_back(index);
     }
   }
   if (changed) {
-    rebuild_cache(app);
+    refresh_live_cache(app, changed_sources);
     app.status = "Live data refreshed";
   }
 }

@@ -129,6 +129,50 @@ TEST_CASE("Live reload refreshes changed file data", "[app][reload][live]") {
   REQUIRE(app.status == "Live data refreshed");
 }
 
+TEST_CASE("Live reload refreshes only changed sources and recomputes derived series", "[app][reload][live][incremental]") {
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_app_model_tests");
+  const auto source_a = write_csv(temp_dir / "live_a.csv", 5, 1.0);
+  const auto source_b = write_csv(temp_dir / "live_b.csv", 5, 2.0);
+
+  tsv::app::AppState app;
+  tsv::app::ensure_workspace_defaults(app);
+  app.live_mode = true;
+  tsv::app::open_source(app, source_a, "run_a", tsv::SourceKind::Csv);
+  tsv::app::open_source(app, source_b, "run_b", tsv::SourceKind::Csv);
+
+  const auto src_a = std::find_if(app.sources.begin(), app.sources.end(), [&](const auto& item) {
+    return item.alias == "run_a";
+  });
+  const auto src_b = std::find_if(app.sources.begin(), app.sources.end(), [&](const auto& item) {
+    return item.alias == "run_b";
+  });
+  REQUIRE(src_a != app.sources.end());
+  REQUIRE(src_b != app.sources.end());
+
+  tsv::app::add_raw_series(app, *src_a, std::nullopt, "speed");
+  tsv::app::add_raw_series(app, *src_b, std::nullopt, "speed");
+  app.workspace.windows[0].tabs[0].expression_draft = "series(\"run_a.speed\") + series(\"run_b.speed\")";
+  tsv::app::add_derived_series_to_tab(app, 0, 0);
+
+  const auto derived_name = app.workspace.windows[0].tabs[0].series.back().name;
+  REQUIRE(app.series_cache.at("run_a.speed").value.back() == Catch::Approx(4.0));
+  REQUIRE(app.series_cache.at("run_b.speed").value.back() == Catch::Approx(8.0));
+  REQUIRE(app.series_cache.at(derived_name).value.back() == Catch::Approx(12.0));
+
+  write_csv(source_a, 5, 10.0);
+  std::error_code ec;
+  std::filesystem::last_write_time(source_a, std::filesystem::file_time_type::clock::now() + std::chrono::seconds(1), ec);
+  REQUIRE_FALSE(ec);
+
+  app.last_poll = std::chrono::steady_clock::now() - std::chrono::seconds(2);
+  tsv::app::poll_live_reload(app);
+
+  REQUIRE(app.series_cache.at("run_a.speed").value.back() == Catch::Approx(40.0));
+  REQUIRE(app.series_cache.at("run_b.speed").value.back() == Catch::Approx(8.0));
+  REQUIRE(app.series_cache.at(derived_name).value.back() == Catch::Approx(48.0));
+  REQUIRE(app.status == "Live data refreshed");
+}
+
 TEST_CASE("Live reload refreshes sqlite sidecar writes", "[app][reload][live][sqlite]") {
   const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_app_model_tests");
   const auto sqlite_path = tsv::test::make_sqlite_fixture(temp_dir / "live_reload.sqlite");
