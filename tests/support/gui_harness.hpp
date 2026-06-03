@@ -99,7 +99,7 @@ class GuiHarness {
   }
 
   void refresh() {
-    tsv::app::rebuild_cache(app_);
+    tsv::app::reload_sources(app_);
   }
 
   [[nodiscard]] tsv::app::AppState& state() {

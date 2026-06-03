@@ -184,7 +184,7 @@ void render_parameter_panel(tsv::app::AppState& app, Ui& ui) {
   }
   ui.same_line();
   if (ui.button("Reload", "reload")) {
-    tsv::app::rebuild_cache(app);
+    tsv::app::reload_sources(app);
   }
   ui.same_line();
   ui.checkbox("Live", app.live_mode, "live-mode");

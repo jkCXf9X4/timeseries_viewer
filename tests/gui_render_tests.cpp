@@ -139,6 +139,33 @@ TEST_CASE("Rendered GUI workflow can open sources, browse parameters, bind, and 
   REQUIRE(std::adjacent_find(unique_labels.begin(), unique_labels.end()) == unique_labels.end());
 }
 
+TEST_CASE("Rendered GUI reload button refreshes cached source data", "[ui][reload]") {
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_gui_render_tests");
+  const auto source = write_csv(temp_dir / "reload.csv", {"time", "speed"}, 5, 1.0);
+
+  tsv::app::AppState app;
+  tsv::app::ensure_workspace_defaults(app);
+  tsv::app::open_source(app, source, "run", tsv::SourceKind::Csv);
+  tsv::app::rebuild_cache(app);
+
+  const auto src = std::find_if(app.sources.begin(), app.sources.end(), [&](const auto& item) {
+    return item.alias == "run";
+  });
+  REQUIRE(src != app.sources.end());
+
+  tsv::app::add_raw_series(app, *src, std::nullopt, "speed");
+  REQUIRE(app.series_cache.at("run.speed").value.back() == Catch::Approx(5.0));
+
+  write_csv(temp_dir / "reload.csv", {"time", "speed"}, 5, 10.0);
+
+  tsv::test::ScriptedGuiBackend ui;
+  ui.click("reload");
+  tsv::ui::render_app(app, ui);
+
+  REQUIRE(app.series_cache.at("run.speed").value.back() == Catch::Approx(50.0));
+  REQUIRE(app.status == "Reloaded data");
+}
+
 TEST_CASE("Rendered variable browsing keeps parent nodes navigation-only and scales with many parameters", "[ui][browser]") {
   const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_gui_render_tests");
   std::vector<std::string> headers = {"time"};

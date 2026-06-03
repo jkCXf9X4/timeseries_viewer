@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 
@@ -71,6 +72,61 @@ TEST_CASE("Large series are downsampled to the configured point budget", "[app][
   tsv::app::add_raw_series(app, *src, std::nullopt, "speed");
   REQUIRE(app.series_cache.contains("large.speed"));
   REQUIRE(app.series_cache.at("large.speed").time.size() == 10);
+}
+
+TEST_CASE("Reload sources refreshes changed file data", "[app][reload]") {
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_app_model_tests");
+  const auto source = write_csv(temp_dir / "reload.csv", 5, 1.0);
+
+  tsv::app::AppState app;
+  tsv::app::ensure_workspace_defaults(app);
+  tsv::app::open_source(app, source, "run", tsv::SourceKind::Csv);
+
+  const auto src = std::find_if(app.sources.begin(), app.sources.end(), [&](const auto& item) {
+    return item.alias == "run";
+  });
+  REQUIRE(src != app.sources.end());
+
+  tsv::app::add_raw_series(app, *src, std::nullopt, "speed");
+  REQUIRE(app.series_cache.contains("run.speed"));
+  REQUIRE(app.series_cache.at("run.speed").value.back() == Catch::Approx(4.0));
+
+  write_csv(source, 5, 10.0);
+  tsv::app::reload_sources(app);
+
+  REQUIRE(app.series_cache.contains("run.speed"));
+  REQUIRE(app.series_cache.at("run.speed").value.back() == Catch::Approx(40.0));
+}
+
+TEST_CASE("Live reload refreshes changed file data", "[app][reload][live]") {
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_app_model_tests");
+  const auto source = write_csv(temp_dir / "live_reload.csv", 5, 1.0);
+
+  tsv::app::AppState app;
+  tsv::app::ensure_workspace_defaults(app);
+  app.live_mode = true;
+  tsv::app::open_source(app, source, "run", tsv::SourceKind::Csv);
+
+  const auto src = std::find_if(app.sources.begin(), app.sources.end(), [&](const auto& item) {
+    return item.alias == "run";
+  });
+  REQUIRE(src != app.sources.end());
+
+  tsv::app::add_raw_series(app, *src, std::nullopt, "speed");
+  REQUIRE(app.series_cache.contains("run.speed"));
+  REQUIRE(app.series_cache.at("run.speed").value.back() == Catch::Approx(4.0));
+
+  write_csv(source, 5, 10.0);
+  std::error_code ec;
+  std::filesystem::last_write_time(source, std::filesystem::file_time_type::clock::now() + std::chrono::seconds(1), ec);
+  REQUIRE_FALSE(ec);
+
+  app.last_poll = std::chrono::steady_clock::now() - std::chrono::seconds(2);
+  tsv::app::poll_live_reload(app);
+
+  REQUIRE(app.series_cache.contains("run.speed"));
+  REQUIRE(app.series_cache.at("run.speed").value.back() == Catch::Approx(40.0));
+  REQUIRE(app.status == "Live data refreshed");
 }
 
 TEST_CASE("App project save/load preserves multi-tab state and point budget", "[app][project]") {

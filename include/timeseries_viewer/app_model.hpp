@@ -130,6 +130,7 @@ void set_parameter_selected(
 
 void save_project_file(AppState& app, const fs::path& path);
 void load_project_file(AppState& app, const fs::path& path);
+void reload_sources(AppState& app);
 void poll_live_reload(AppState& app);
 
 } // namespace tsv::app

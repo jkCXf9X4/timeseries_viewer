@@ -821,6 +821,20 @@ void load_project_file(AppState& app, const fs::path& path) {
   }
 }
 
+void reload_sources(AppState& app) {
+  for (auto& source : app.sources) {
+    std::error_code ec;
+    const auto current = fs::last_write_time(source.catalog.path, ec);
+    if (!ec) {
+      source.last_write_time = current;
+    }
+  }
+
+  app.raw_series_cache.clear();
+  rebuild_cache(app);
+  app.status = "Reloaded data";
+}
+
 void poll_live_reload(AppState& app) {
   if (!app.live_mode) {
     return;
