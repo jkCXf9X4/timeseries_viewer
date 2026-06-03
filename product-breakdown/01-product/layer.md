@@ -39,6 +39,8 @@ The product should let a user open multiple time-series sources, browse their co
 
 See [use cases](use-cases.md) for the concrete user flows that the first implementation must support.
 
+See [UI description](ui-description.md) for the panel layout, focus rules, and interaction contract used during design.
+
 ## Product Requirements
 
 - The source browser must make file and variable selection visual and explicit.

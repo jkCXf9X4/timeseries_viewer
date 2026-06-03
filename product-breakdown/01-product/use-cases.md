@@ -142,6 +142,10 @@ The user may want separate analysis contexts visible at the same time, such as o
 - Each tab owns a single plot.
 - Each plot has its own parameter selection and does not inherit another tab’s selection automatically.
 - The user can use the same data source in more than one tab with different parameter combinations.
+- The parameter browser is fixed to the left side of the app and stays anchored there while its width can be resized.
+- The plot inspector is fixed to the right side of the app and stays anchored there while its width can be resized.
+- The right plot inspector shows the active plot status fields.
+- Clicking a window or tab makes that plot the active plot for both side panels.
 
 ### Notes
 

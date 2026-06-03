@@ -22,6 +22,9 @@ Verification must prove the product can open real files, select variables, rende
 - Select and deselect variables from nested names using tickboxes.
 - Select parameters through a menu or panel and verify the chosen source binding is reflected in the displayed plot.
 - Open multiple windows, create multiple tabs in a window, and verify each tab owns exactly one plot.
+- Verify the parameter browser stays fixed on the left side with resizable width and the plot inspector stays fixed on the right side with resizable width.
+- Verify both side panels update to the active plot when the focused tab changes.
+- Verify clicking a window or tab updates the active plot shown in both side panels.
 - Overlay multiple raw series in one view.
 - Create a derived `a - b` series and verify alignment.
 - Save a project and restore it into the same workspace shape.
@@ -39,6 +42,7 @@ Verification must prove the product can open real files, select variables, rende
 - The user can choose parameters through an explicit menu or panel rather than implicit hidden binding.
 - The user can add or remove variables from the plot by ticking and clearing checkboxes in the variable browser.
 - The user can keep multiple windows open simultaneously, with each tab showing one plot and its own selection state.
+- The user can keep the parameter browser fixed on the left and the plot inspector fixed on the right, with both panels following the active plot.
 - The user can create, compare, and save views without leaving the application.
 
 ## Acceptance Criteria
@@ -46,6 +50,7 @@ Verification must prove the product can open real files, select variables, rende
 - The source browser exposes CSV and SQLite content consistently.
 - The parameter-selection UI keeps file/database bindings explicit.
 - The variable browser supports both add and remove through tickbox selection.
+- The side panels remain fixed to their sides while allowing width adjustment.
 - The same source state can be saved and restored from a project file.
 - A comparison plot can show multiple series together.
 - Each plot tab keeps an isolated parameter selection.

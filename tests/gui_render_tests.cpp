@@ -204,3 +204,63 @@ TEST_CASE("Rendered plot labels remain distinct for similar series names", "[ui]
     return label.find("run_b") != std::string::npos;
   }));
 }
+
+TEST_CASE("Rendered UI pins the parameter browser left and the plot inspector right", "[ui][layout]") {
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_gui_render_tests");
+  const auto source = write_csv(temp_dir / "layout.csv", {"time", "speed"}, 8, 1.0);
+
+  tsv::app::AppState app;
+  tsv::app::ensure_workspace_defaults(app);
+  tsv::app::open_source(app, source, "run", tsv::SourceKind::Csv);
+  tsv::app::rebuild_cache(app);
+
+  tsv::test::ScriptedGuiBackend ui;
+  ui.set_u64("point-budget", 1024);
+  tsv::ui::render_app(app, ui);
+  ui.set_viewport_size({1600.0f, 720.0f});
+  tsv::ui::render_app(app, ui);
+
+  REQUIRE(std::any_of(ui.window_size_log.begin(), ui.window_size_log.end(), [](const auto& item) {
+    return item.first == "Parameters" && item.second[0] == Catch::Approx(360.0f) && item.second[1] == Catch::Approx(900.0f);
+  }));
+  REQUIRE(std::any_of(ui.window_size_log.begin(), ui.window_size_log.end(), [](const auto& item) {
+    return item.first == "Plot Inspector" && item.second[0] == Catch::Approx(420.0f) && item.second[1] == Catch::Approx(900.0f);
+  }));
+  REQUIRE(std::any_of(ui.window_size_log.begin(), ui.window_size_log.end(), [](const auto& item) {
+    return item.first == "Parameters" && item.second[0] == Catch::Approx(360.0f) && item.second[1] == Catch::Approx(720.0f);
+  }));
+  REQUIRE(std::any_of(ui.window_size_log.begin(), ui.window_size_log.end(), [](const auto& item) {
+    return item.first == "Plot Inspector" && item.second[0] == Catch::Approx(420.0f) && item.second[1] == Catch::Approx(720.0f);
+  }));
+  REQUIRE(std::count(ui.separator_log.begin(), ui.separator_log.end(), "Active Plot") == 2);
+  REQUIRE(app.workspace.point_budget == 1024);
+  REQUIRE(std::any_of(ui.text_log.begin(), ui.text_log.end(), [](const std::string& text) {
+    return text == "Window: Window 1";
+  }));
+  REQUIRE(std::any_of(ui.text_log.begin(), ui.text_log.end(), [](const std::string& text) {
+    return text == "Tab: Plot 1";
+  }));
+}
+
+TEST_CASE("Active plot follows focused windows and clicked tabs", "[ui][focus]") {
+  tsv::app::AppState app;
+  tsv::app::ensure_workspace_defaults(app);
+  tsv::app::add_window(app, "Window 2");
+  tsv::app::add_tab(app, 1, "Plot 2");
+  app.active_window = 0;
+  app.workspace.windows[1].active_tab = 1;
+
+  tsv::test::ScriptedGuiBackend ui;
+  ui.set_focused_window("Window 2");
+  ui.click("tab-1-1");
+  tsv::ui::render_app(app, ui);
+
+  REQUIRE(app.active_window == 1);
+  REQUIRE(app.workspace.windows[1].active_tab == 1);
+  REQUIRE(std::any_of(ui.text_log.begin(), ui.text_log.end(), [](const std::string& text) {
+    return text == "Window: Window 2";
+  }));
+  REQUIRE(std::any_of(ui.text_log.begin(), ui.text_log.end(), [](const std::string& text) {
+    return text == "Tab: Plot 2";
+  }));
+}

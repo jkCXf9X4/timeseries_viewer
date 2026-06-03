@@ -17,6 +17,10 @@ Supporting indexes:
 - [decision log](decision-log.md)
 - [traceability map](traceability-map.md)
 
+Design references:
+
+- [UI description](01-product/ui-description.md)
+
 Source plan:
 
 - [docs/application-plan.md](../docs/application-plan.md)

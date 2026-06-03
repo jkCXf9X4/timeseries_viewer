@@ -57,6 +57,9 @@ struct AppState {
   std::chrono::steady_clock::time_point last_poll{std::chrono::steady_clock::now()};
   fs::path project_path;
   int active_window{0};
+  float parameter_panel_width{360.0f};
+  float plot_inspector_width{420.0f};
+  bool sidebar_layout_initialized{false};
 };
 
 std::string sanitize_identifier(std::string value);

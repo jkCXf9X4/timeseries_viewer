@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -18,6 +19,14 @@ namespace fs = std::filesystem;
 
 class ScriptedGuiBackend {
  public:
+  void set_viewport_size(std::array<float, 2> size) {
+    viewport_size_ = size;
+  }
+
+  void set_focused_window(std::string title) {
+    focused_window_ = std::move(title);
+  }
+
   void click(std::string id_or_label) {
     clicks_.insert(std::move(id_or_label));
   }
@@ -50,8 +59,39 @@ class ScriptedGuiBackend {
     save_project_path_ = std::move(path);
   }
 
-  bool begin_window(std::string_view, std::string_view) {
+  void set_next_window_pos(float, float) {}
+
+  void set_next_window_size(float width, float height) {
+    pending_window_size_ = std::array<float, 2>{width, height};
+  }
+
+  std::array<float, 2> viewport_size() const {
+    return viewport_size_;
+  }
+
+  std::array<float, 2> window_size() const {
+    return current_window_size_;
+  }
+
+  bool begin_window(std::string_view title, std::string_view, std::uint32_t) {
+    current_window_title_ = std::string(title);
+    window_titles.push_back(current_window_title_);
+    if (pending_window_size_.has_value()) {
+      current_window_size_ = *pending_window_size_;
+      pending_window_size_.reset();
+    } else if (current_window_title_ == "Parameters") {
+      current_window_size_ = {360.0f, viewport_size_[1]};
+    } else if (current_window_title_ == "Plot Inspector") {
+      current_window_size_ = {420.0f, viewport_size_[1]};
+    } else {
+      current_window_size_ = {1200.0f, viewport_size_[1]};
+    }
+    window_size_log.push_back({current_window_title_, current_window_size_});
     return true;
+  }
+
+  bool window_focused() const {
+    return current_window_title_ == focused_window_;
   }
 
   void end_window() {}
@@ -139,8 +179,9 @@ class ScriptedGuiBackend {
 
   void end_tab_bar() {}
 
-  bool begin_tab_item(std::string_view, bool selected, std::string_view) {
-    return selected;
+  bool begin_tab_item(std::string_view label, bool selected, std::string_view id) {
+    const auto clicked = consume_click(label, id);
+    return selected || clicked;
   }
 
   void end_tab_item() {}
@@ -159,13 +200,19 @@ class ScriptedGuiBackend {
 
   void end_plot() {}
 
-  void separator_text(std::string_view) {}
+  void separator_text(std::string_view text) {
+    separator_log.push_back(std::string(text));
+  }
 
   void same_line() {}
 
-  void text(std::string_view) {}
+  void text(std::string_view text) {
+    text_log.push_back(std::string(text));
+  }
 
-  void text_disabled(std::string_view) {}
+  void text_disabled(std::string_view text) {
+    text_disabled_log.push_back(std::string(text));
+  }
 
   void push_id(std::string_view) {}
 
@@ -191,6 +238,11 @@ class ScriptedGuiBackend {
     return take_path(save_project_path_);
   }
 
+  std::vector<std::string> window_titles;
+  std::vector<std::pair<std::string, std::array<float, 2>>> window_size_log;
+  std::vector<std::string> text_log;
+  std::vector<std::string> text_disabled_log;
+  std::vector<std::string> separator_log;
   std::vector<std::string> plot_labels;
 
  private:
@@ -261,6 +313,11 @@ class ScriptedGuiBackend {
   std::optional<fs::path> open_source_path_;
   std::optional<fs::path> open_project_path_;
   std::optional<fs::path> save_project_path_;
+  std::array<float, 2> viewport_size_{1600.0f, 900.0f};
+  std::array<float, 2> current_window_size_{1200.0f, 800.0f};
+  std::string current_window_title_;
+  std::optional<std::array<float, 2>> pending_window_size_;
+  std::string focused_window_;
 };
 
 } // namespace tsv::test

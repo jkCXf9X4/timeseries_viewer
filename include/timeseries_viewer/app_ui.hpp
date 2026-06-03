@@ -12,6 +12,23 @@
 namespace tsv::ui {
 namespace detail {
 
+constexpr std::uint32_t kFixedSidebarFlags = 0x1u | 0x4u | 0x10u;
+
+template <typename Ui>
+void render_active_plot_summary(tsv::app::AppState& app, Ui& ui) {
+  auto& window = tsv::app::active_window(app);
+  auto& tab = tsv::app::active_tab(app);
+
+  ui.separator_text("Active Plot");
+  ui.text(std::string("Window: ") + window.title);
+  ui.text(std::string("Tab: ") + tab.title);
+  if (tab.active_series_index < tab.series.size()) {
+    ui.text(std::string("Series: ") + tab.series[tab.active_series_index].name);
+  } else {
+    ui.text_disabled("Series: none");
+  }
+}
+
 template <typename Ui>
 void render_parameter_tree(tsv::app::AppState& app, Ui& ui, const tsv::app::OpenSource& source, const tsv::TreeNode& node, std::size_t window_index, std::size_t tab_index) {
   auto& tab = app.workspace.windows.at(window_index).tabs.at(tab_index);
@@ -39,14 +56,31 @@ void render_parameter_tree(tsv::app::AppState& app, Ui& ui, const tsv::app::Open
 }
 
 template <typename Ui>
-void render_series_editor(tsv::app::AppState& app, Ui& ui, std::size_t window_index, std::size_t tab_index) {
-  auto& tab = app.workspace.windows.at(window_index).tabs.at(tab_index);
+void render_plot_inspector(tsv::app::AppState& app, Ui& ui) {
+  tsv::app::ensure_workspace_defaults(app);
+  render_active_plot_summary(app, ui);
+  if (app.sources.empty()) {
+    ui.text_disabled("Open a CSV file or SQLite database to inspect the active plot.");
+    return;
+  }
+
+  auto& window = tsv::app::active_window(app);
+  auto& tab = tsv::app::active_tab(app);
+  const std::size_t window_index = static_cast<std::size_t>(app.active_window);
+  const std::size_t tab_index = window.active_tab;
   const std::string scope = "w" + std::to_string(window_index) + "_t" + std::to_string(tab_index);
 
   ui.separator_text("Plot Settings");
   ui.input_text("Tab title", tab.title, scope + "::tab-title");
   ui.checkbox("Autoscale X", tab.autoscale_x, scope + "::autoscale-x");
   ui.checkbox("Autoscale Y", tab.autoscale_y, scope + "::autoscale-y");
+
+  std::uint64_t budget = static_cast<std::uint64_t>(app.workspace.point_budget);
+  if (ui.input_u64("Point budget", budget, "point-budget")) {
+    app.workspace.point_budget = static_cast<std::size_t>(budget);
+    tsv::app::rebuild_cache(app);
+  }
+  ui.text_disabled("0 means no explicit downsampling limit");
 
   if (!tab.autoscale_x) {
     std::array<double, 2> range{0.0, 1.0};
@@ -135,7 +169,10 @@ void render_series_editor(tsv::app::AppState& app, Ui& ui, std::size_t window_in
 template <typename Ui>
 void render_parameter_panel(tsv::app::AppState& app, Ui& ui) {
   tsv::app::ensure_workspace_defaults(app);
-  if (!ui.begin_window("Parameters", "parameters-window")) {
+  const auto viewport = ui.viewport_size();
+  ui.set_next_window_size(app.parameter_panel_width, viewport[1]);
+  ui.set_next_window_pos(0.0f, 0.0f);
+  if (!ui.begin_window("Parameters", "parameters-window", kFixedSidebarFlags)) {
     return;
   }
 
@@ -174,36 +211,6 @@ void render_parameter_panel(tsv::app::AppState& app, Ui& ui) {
     tsv::app::add_tab(app, static_cast<std::size_t>(app.active_window));
   }
 
-  ui.separator_text("Workspace");
-  if (ui.begin_combo("Active window", app.workspace.windows.at(static_cast<std::size_t>(app.active_window)).title, "active-window")) {
-    for (std::size_t i = 0; i < app.workspace.windows.size(); ++i) {
-      const bool selected = static_cast<int>(i) == app.active_window;
-      if (ui.selectable(app.workspace.windows[i].title, selected, std::string("window-") + std::to_string(i))) {
-        app.active_window = static_cast<int>(i);
-      }
-    }
-    ui.end_combo();
-  }
-
-  std::uint64_t budget = static_cast<std::uint64_t>(app.workspace.point_budget);
-  if (ui.input_u64("Point budget", budget, "point-budget")) {
-    app.workspace.point_budget = static_cast<std::size_t>(budget);
-    tsv::app::rebuild_cache(app);
-  }
-
-  ui.text_disabled("0 means no explicit downsampling limit");
-
-  auto& window = tsv::app::active_window(app);
-  auto& tab = tsv::app::active_tab(app);
-  ui.separator_text("Active Target");
-  ui.text(std::string("Window: ") + window.title);
-  ui.text(std::string("Tab: ") + tab.title);
-  if (tab.active_series_index < tab.series.size()) {
-    ui.text(std::string("Series: ") + tab.series[tab.active_series_index].name);
-  } else {
-    ui.text_disabled("Series: none");
-  }
-
   ui.separator_text("Parameter Browser");
   if (app.sources.empty()) {
     ui.text_disabled("Open a CSV file or SQLite database to browse parameters.");
@@ -213,8 +220,9 @@ void render_parameter_panel(tsv::app::AppState& app, Ui& ui) {
     if (ui.tree_node(source.alias, source.alias)) {
       ui.text_disabled(source.catalog.path.string());
       const auto tree = tsv::app::build_bindable_parameter_tree(source);
+      const auto active_tab_index = app.workspace.windows.at(static_cast<std::size_t>(app.active_window)).active_tab;
       for (const auto& child : tree.children) {
-        detail::render_parameter_tree(app, ui, source, child, static_cast<std::size_t>(app.active_window), window.active_tab);
+        detail::render_parameter_tree(app, ui, source, child, static_cast<std::size_t>(app.active_window), active_tab_index);
       }
       ui.tree_pop();
     }
@@ -228,6 +236,7 @@ void render_parameter_panel(tsv::app::AppState& app, Ui& ui) {
   }
 
   ui.text(app.status);
+  app.parameter_panel_width = ui.window_size()[0];
   ui.end_window();
 }
 
@@ -236,8 +245,12 @@ void render_analysis_windows(tsv::app::AppState& app, Ui& ui) {
   tsv::app::ensure_workspace_defaults(app);
   for (std::size_t window_index = 0; window_index < app.workspace.windows.size(); ++window_index) {
     auto& window = app.workspace.windows[window_index];
-    if (!ui.begin_window(window.title, std::string("analysis-window-") + std::to_string(window_index))) {
+    if (!ui.begin_window(window.title, std::string("analysis-window-") + std::to_string(window_index), 0u)) {
       continue;
+    }
+
+    if (ui.window_focused()) {
+      app.active_window = static_cast<int>(window_index);
     }
 
     if (ui.button("New tab", std::string("window-new-tab-") + std::to_string(window_index))) {
@@ -252,9 +265,6 @@ void render_analysis_windows(tsv::app::AppState& app, Ui& ui) {
         if (ui.begin_tab_item(tab.title, window.active_tab == tab_index, std::string("tab-") + std::to_string(window_index) + "-" + std::to_string(tab_index))) {
           window.active_tab = tab_index;
           app.active_window = static_cast<int>(window_index);
-
-          detail::render_series_editor(app, ui, window_index, tab_index);
-          ui.separator_text("Plot");
 
           if (ui.begin_plot(std::string("plot##") + std::to_string(window_index) + "_" + std::to_string(tab_index))) {
             ui.setup_axes("time", "value", tab.autoscale_x, tab.autoscale_y);
@@ -288,12 +298,30 @@ void render_analysis_windows(tsv::app::AppState& app, Ui& ui) {
   }
 }
 
+template <typename Ui>
+void render_plot_inspector_panel(tsv::app::AppState& app, Ui& ui) {
+  tsv::app::ensure_workspace_defaults(app);
+  const auto viewport = ui.viewport_size();
+  ui.set_next_window_size(app.plot_inspector_width, viewport[1]);
+  const auto x = viewport[0] - app.plot_inspector_width;
+  ui.set_next_window_pos(x, 0.0f);
+  if (!ui.begin_window("Plot Inspector", "plot-inspector-window", kFixedSidebarFlags)) {
+    return;
+  }
+
+  render_plot_inspector(app, ui);
+  app.plot_inspector_width = ui.window_size()[0];
+  ui.end_window();
+}
+
 } // namespace detail
 
 template <typename Ui>
 void render_app(tsv::app::AppState& app, Ui& ui) {
-  detail::render_parameter_panel(app, ui);
   detail::render_analysis_windows(app, ui);
+  detail::render_parameter_panel(app, ui);
+  detail::render_plot_inspector_panel(app, ui);
+  app.sidebar_layout_initialized = true;
 }
 
 } // namespace tsv::ui

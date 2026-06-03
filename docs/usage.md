@@ -10,6 +10,8 @@
 6. Tick the checkbox next to a non-time variable to add it to the active plot tab.
 7. Clear the checkbox to remove that variable from the active plot tab.
 8. Rebind an existing series from the selected-series controls in the plot editor when you need a different source or column.
+9. Use the left Parameters panel for source selection and the right Plot Inspector panel for plot settings, point budget, and series details; the inspector shows the active plot status fields.
+10. Click a window or tab to make it the active plot for both side panels.
 
 ## Compare Sources
 
@@ -26,6 +28,8 @@
 - Multiple series can be shown together in the same plot.
 - Each analysis window can hold multiple tabs.
 - Each tab contains exactly one plot and its own parameter selection.
+- The left sidebar is the fixed Parameters panel.
+- The right sidebar is the fixed Plot Inspector panel.
 
 ## Create Derived Series
 
@@ -48,7 +52,7 @@
 
 ## Large Data
 
-- Use `Point budget` to cap the number of plotted samples loaded per selected series.
+- Use `Point budget` in the Plot Inspector to cap the number of plotted samples loaded per selected series.
 - `0` disables the explicit cap and leaves the loader unbounded.
 - The app keeps a cache of raw series bindings so rebinding and redraws avoid unnecessary reloads when the source file has not changed.
 

@@ -22,6 +22,8 @@ The architecture should separate concerns into source ingestion, normalized time
 
 Provides the multi-window workspace, source browser, parameter selection menu, plot tabs, expression editor, and project actions.
 
+The detailed layout contract for this shell is captured in [01-product/ui-description.md](../01-product/ui-description.md).
+
 ### Window Manager
 
 Owns top-level windows, each window's tab set, and the one-plot-per-tab rule.
@@ -82,6 +84,7 @@ Polls sources for changes and invalidates or reloads affected series when live m
 - PB-008: Use interpolation onto the left-hand time grid for comparison and derived series.
 - PB-010: Parameter selection is explicit and bound to the open source or database that provides the series.
 - PB-011: The top-level analysis layout uses multiple simultaneous windows, each with multiple tabs, and each tab contains exactly one plot.
+- PB-012: The parameter browser is fixed to the left side of the app, the plot inspector is fixed to the right side, and both panels follow the active plot.
 
 ## Architecture Risks
 

@@ -10,9 +10,25 @@
 #define GLFW_INCLUDE_NONE
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#if defined(_WIN32)
+#ifndef GLFW_EXPOSE_NATIVE_WIN32
+#define GLFW_EXPOSE_NATIVE_WIN32
+#endif
+#include <GLFW/glfw3native.h>
+#elif defined(__APPLE__)
+#ifndef GLFW_EXPOSE_NATIVE_COCOA
+#define GLFW_EXPOSE_NATIVE_COCOA
+#endif
+#include <GLFW/glfw3native.h>
+#else
+#ifndef GLFW_EXPOSE_NATIVE_X11
+#define GLFW_EXPOSE_NATIVE_X11
+#endif
+#include <GLFW/glfw3native.h>
+#endif
 #include <imgui.h>
 #include <implot.h>
-#include <nfd.h>
+#include <nfd_glfw3.h>
 
 #include "timeseries_viewer/app_model.hpp"
 #include "timeseries_viewer/app_ui.hpp"
@@ -35,9 +51,37 @@ std::string with_hidden_id(std::string_view label, std::string_view id) {
 }
 
 struct ImGuiBackend {
-  bool begin_window(std::string_view title, std::string_view) {
+  GLFWwindow* parent_window = nullptr;
+
+  void set_parent_window(GLFWwindow* window) {
+    parent_window = window;
+  }
+
+  void set_next_window_pos(float x, float y) {
+    ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Always);
+  }
+
+  void set_next_window_size(float width, float height) {
+    ImGui::SetNextWindowSize(ImVec2(width, height), ImGuiCond_Always);
+  }
+
+  std::array<float, 2> viewport_size() const {
+    const auto* viewport = ImGui::GetMainViewport();
+    return {viewport->Size.x, viewport->Size.y};
+  }
+
+  std::array<float, 2> window_size() const {
+    const ImVec2 size = ImGui::GetWindowSize();
+    return {size.x, size.y};
+  }
+
+  bool begin_window(std::string_view title, std::string_view, std::uint32_t flags) {
     const std::string label(title);
-    return ImGui::Begin(label.c_str());
+    return ImGui::Begin(label.c_str(), nullptr, static_cast<ImGuiWindowFlags>(flags));
+  }
+
+  bool window_focused() const {
+    return ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
   }
 
   void end_window() {
@@ -204,6 +248,18 @@ struct ImGuiBackend {
     ImGui::PopID();
   }
 
+  std::optional<nfdwindowhandle_t> native_parent_window() const {
+    if (parent_window == nullptr) {
+      return std::nullopt;
+    }
+
+    nfdwindowhandle_t native_window{};
+    if (!NFD_GetNativeWindowFromGLFWWindow(parent_window, &native_window)) {
+      return std::nullopt;
+    }
+    return native_window;
+  }
+
   bool color_edit4(std::string_view label, std::array<double, 4>& value, std::string_view id) {
     float color[4] = {
       static_cast<float>(value[0]),
@@ -226,7 +282,14 @@ struct ImGuiBackend {
     const nfdu8filteritem_t filters[] = {
       {"Time series", "csv,sqlite,db"}
     };
-    const auto result = NFD_OpenDialogU8(&out_path, filters, 1, nullptr);
+    const auto parent_window = native_parent_window();
+    const nfdopendialogu8args_t args{
+      filters,
+      1,
+      nullptr,
+      parent_window.has_value() ? parent_window.value() : nfdwindowhandle_t{}
+    };
+    const auto result = NFD_OpenDialogU8_With(&out_path, &args);
     if (result != NFD_OKAY) {
       return std::nullopt;
     }
@@ -240,7 +303,14 @@ struct ImGuiBackend {
     const nfdu8filteritem_t filters[] = {
       {"Project", "json"}
     };
-    const auto result = NFD_OpenDialogU8(&out_path, filters, 1, nullptr);
+    const auto parent_window = native_parent_window();
+    const nfdopendialogu8args_t args{
+      filters,
+      1,
+      nullptr,
+      parent_window.has_value() ? parent_window.value() : nfdwindowhandle_t{}
+    };
+    const auto result = NFD_OpenDialogU8_With(&out_path, &args);
     if (result != NFD_OKAY) {
       return std::nullopt;
     }
@@ -254,7 +324,15 @@ struct ImGuiBackend {
     const nfdu8filteritem_t filters[] = {
       {"Project", "json"}
     };
-    const auto result = NFD_SaveDialogU8(&out_path, filters, 1, nullptr, nullptr);
+    const auto parent_window = native_parent_window();
+    const nfdsavedialogu8args_t args{
+      filters,
+      1,
+      nullptr,
+      nullptr,
+      parent_window.has_value() ? parent_window.value() : nfdwindowhandle_t{}
+    };
+    const auto result = NFD_SaveDialogU8_With(&out_path, &args);
     if (result != NFD_OKAY) {
       return std::nullopt;
     }
@@ -309,6 +387,7 @@ int main() {
   app.workspace.windows.front().tabs.front().expression_draft = "series(\"source.variable\")";
 
   ImGuiBackend ui;
+  ui.set_parent_window(window);
 
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
