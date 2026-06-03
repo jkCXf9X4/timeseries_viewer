@@ -34,8 +34,8 @@ void render_parameter_tree(tsv::app::AppState& app, Ui& ui, const tsv::app::Open
   auto& tab = app.workspace.windows.at(window_index).tabs.at(tab_index);
 
   if (node.children.empty()) {
-    const auto binding = tsv::app::find_bindable_parameter(source, node.full_name);
-    if (!binding.has_value()) {
+    const auto* binding = tsv::app::lookup_bindable_parameter(source, node.full_name);
+    if (binding == nullptr) {
       return;
     }
 
@@ -219,7 +219,7 @@ void render_parameter_panel(tsv::app::AppState& app, Ui& ui) {
   for (const auto& source : app.sources) {
     if (ui.tree_node(source.alias, source.alias)) {
       ui.text_disabled(source.catalog.path.string());
-      const auto tree = tsv::app::build_bindable_parameter_tree(source);
+      const auto& tree = tsv::app::bindable_parameter_tree(source);
       const auto active_tab_index = app.workspace.windows.at(static_cast<std::size_t>(app.active_window)).active_tab;
       for (const auto& child : tree.children) {
         detail::render_parameter_tree(app, ui, source, child, static_cast<std::size_t>(app.active_window), active_tab_index);

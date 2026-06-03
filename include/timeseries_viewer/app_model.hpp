@@ -13,18 +13,22 @@ namespace tsv::app {
 
 namespace fs = std::filesystem;
 
-struct OpenSource {
-  tsv::SourceCatalog catalog;
-  std::string alias;
-  std::optional<fs::file_time_type> last_write_time;
-};
-
 struct BindableParameter {
   std::string display_name;
   std::string source_alias;
   std::optional<std::string> table_name;
   std::string value_column;
   std::string source_path;
+};
+
+struct OpenSource {
+  tsv::SourceCatalog catalog;
+  std::string alias;
+  std::optional<fs::file_time_type> last_write_time;
+  mutable bool bindable_parameter_cache_ready{false};
+  mutable std::vector<BindableParameter> bindable_parameter_cache;
+  mutable std::unordered_map<std::string, std::size_t> bindable_parameter_lookup;
+  mutable tsv::TreeNode bindable_parameter_tree_cache;
 };
 
 struct SeriesBindingKey {
@@ -96,6 +100,9 @@ void add_derived_series_to_tab(AppState& app, std::size_t window_index, std::siz
 [[nodiscard]] std::vector<BindableParameter> list_bindable_parameters(const OpenSource& source);
 [[nodiscard]] tsv::TreeNode build_bindable_parameter_tree(const OpenSource& source);
 [[nodiscard]] std::optional<BindableParameter> find_bindable_parameter(const OpenSource& source, const std::string& display_name);
+[[nodiscard]] const std::vector<BindableParameter>& bindable_parameters(const OpenSource& source);
+[[nodiscard]] const tsv::TreeNode& bindable_parameter_tree(const OpenSource& source);
+[[nodiscard]] const BindableParameter* lookup_bindable_parameter(const OpenSource& source, const std::string& display_name);
 [[nodiscard]] std::string plot_legend_label(const tsv::PlotSeriesConfig& series);
 [[nodiscard]] bool parameter_is_selected(
   const tsv::PlotTabConfig& tab,

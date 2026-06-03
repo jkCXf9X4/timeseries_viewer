@@ -41,6 +41,59 @@ std::string make_series_name(const OpenSource& source, const std::optional<std::
   return source.alias + "." + value_column;
 }
 
+template <typename Rows>
+std::optional<tsv::SeriesData> load_series_from_rows(
+  const OpenSource& source,
+  const tsv::TableCatalog& table,
+  const Rows& rows,
+  const std::optional<std::string>& table_name,
+  const std::optional<std::string>& time_column_override,
+  const std::string& value_column,
+  std::string& error,
+  std::string& time_column_out,
+  const std::optional<std::size_t> max_points
+) {
+  const auto resolved_time_column = time_column_override.value_or(default_time_column(table));
+  const auto time_index = tsv::column_index_by_name(table.columns, resolved_time_column);
+  const auto value_index = tsv::column_index_by_name(table.columns, value_column);
+
+  if (!time_index.has_value()) {
+    error = "Time column not found: " + resolved_time_column;
+    return std::nullopt;
+  }
+  if (!value_index.has_value()) {
+    error = "Value column not found: " + value_column;
+    return std::nullopt;
+  }
+
+  tsv::SeriesData series;
+  series.source_name = source.alias;
+  series.table_name = table.name;
+  series.time_column = table.columns[*time_index].name;
+  series.value_column = table.columns[*value_index].name;
+  series.name = make_series_name(source, table_name, value_column);
+  time_column_out = series.time_column;
+
+  for (const auto& row : rows) {
+    if (*time_index >= row.size() || *value_index >= row.size()) {
+      continue;
+    }
+    const auto time_value = tsv::parse_scalar(row[*time_index]);
+    double numeric_value = 0.0;
+    if (!time_value.has_value() || !tsv::parse_double(row[*value_index], numeric_value)) {
+      continue;
+    }
+    series.time.push_back(*time_value);
+    series.value.push_back(numeric_value);
+  }
+
+  if (max_points.has_value()) {
+    tsv::downsample_series(series, *max_points);
+  }
+
+  return series;
+}
+
 const OpenSource* find_source_by_path(const AppState& app, const fs::path& path) {
   const auto it = std::find_if(app.sources.begin(), app.sources.end(), [&](const OpenSource& source) {
     return source.catalog.path == path;
@@ -69,27 +122,79 @@ std::optional<tsv::SeriesData> load_raw_series(
     error = "Table not found";
     return std::nullopt;
   }
+  try {
+    if (source.catalog.kind == tsv::SourceKind::Csv) {
+      const auto rows = tsv::read_csv_rows(source.catalog.path);
+      return load_series_from_rows(source, *table, rows, table_name, time_column_override, value_column, error, time_column_out, max_points);
+    }
 
-  tsv::SeriesRequest request;
-  request.table_name = table_name;
-  request.time_column = time_column_override.value_or(default_time_column(*table));
-  request.value_column = value_column;
-  request.max_points = max_points;
-  time_column_out = request.time_column;
+    sqlite3* db = nullptr;
+    if (sqlite3_open_v2(source.catalog.path.string().c_str(), &db, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK) {
+      const std::string message = db != nullptr ? sqlite3_errmsg(db) : "unknown SQLite error";
+      if (db != nullptr) {
+        sqlite3_close(db);
+      }
+      error = "Failed to open SQLite file: " + message;
+      return std::nullopt;
+    }
 
-  tsv::LoadOutcome outcome;
-  if (source.catalog.kind == tsv::SourceKind::Csv) {
-    outcome = tsv::load_csv_series(source.catalog.path, request);
-  } else {
-    outcome = tsv::load_sqlite_series(source.catalog.path, table->name, request);
-  }
+    struct DbCloser {
+      sqlite3* db{nullptr};
+      ~DbCloser() {
+        if (db != nullptr) {
+          sqlite3_close(db);
+        }
+      }
+    } closer{db};
 
-  if (!outcome.ok) {
-    error = outcome.error;
+    const auto rows = tsv::read_sqlite_rows(db, table->name, table->columns);
+    return load_series_from_rows(source, *table, rows, table_name, time_column_override, value_column, error, time_column_out, max_points);
+  } catch (const std::exception& ex) {
+    error = ex.what();
     return std::nullopt;
   }
-  outcome.series.name = make_series_name(source, table_name, value_column);
-  return outcome.series;
+}
+
+void rebuild_bindable_parameter_cache(const OpenSource& source) {
+  source.bindable_parameter_cache.clear();
+  source.bindable_parameter_lookup.clear();
+  source.bindable_parameter_tree_cache = tsv::TreeNode{"", "", false, {}};
+
+  for (const auto& table : source.catalog.tables) {
+    const auto time_column = tsv::infer_time_column(table.columns);
+    for (const auto& column : table.columns) {
+      if (time_column.has_value() && column.name == *time_column) {
+        continue;
+      }
+
+      BindableParameter parameter;
+      parameter.source_alias = source.alias;
+      parameter.source_path = source.catalog.path.string();
+      parameter.value_column = column.name;
+      if (source.catalog.kind == tsv::SourceKind::Sqlite) {
+        parameter.table_name = table.name;
+        parameter.display_name = source.alias + "." + table.name + "." + column.name;
+      } else {
+        parameter.display_name = source.alias + "." + column.name;
+      }
+      source.bindable_parameter_cache.push_back(std::move(parameter));
+    }
+  }
+
+  std::sort(source.bindable_parameter_cache.begin(), source.bindable_parameter_cache.end(), [](const BindableParameter& lhs, const BindableParameter& rhs) {
+    return lhs.display_name < rhs.display_name;
+  });
+
+  source.bindable_parameter_lookup.reserve(source.bindable_parameter_cache.size());
+  std::vector<std::string> sorted_names;
+  sorted_names.reserve(source.bindable_parameter_cache.size());
+  for (std::size_t index = 0; index < source.bindable_parameter_cache.size(); ++index) {
+    const auto& parameter = source.bindable_parameter_cache[index];
+    source.bindable_parameter_lookup.emplace(parameter.display_name, index);
+    sorted_names.push_back(parameter.display_name);
+  }
+  source.bindable_parameter_tree_cache = tsv::build_variable_tree(sorted_names);
+  source.bindable_parameter_cache_ready = true;
 }
 
 void populate_legacy_bindings(AppState& app, const tsv::ProjectState& project) {
@@ -398,28 +503,26 @@ void rebuild_cache(AppState& app) {
 }
 
 void add_raw_series(AppState& app, const OpenSource& source, const std::optional<std::string>& table_name, const std::string& value_column) {
+  const auto table = find_table(source.catalog, table_name);
+  if (!table.has_value()) {
+    app.status = "Table not found";
+    return;
+  }
+
   tsv::PlotSeriesConfig series_cfg;
   series_cfg.source_alias = source.alias;
   series_cfg.source_path = source.catalog.path.string();
   series_cfg.table_name = table_name;
   series_cfg.value_column = value_column;
-
-  std::string error;
-  std::string time_column;
-  const auto budget = app.workspace.point_budget == 0 ? std::optional<std::size_t>{} : std::optional<std::size_t>{app.workspace.point_budget};
-  const auto preview = load_raw_series(source, table_name, std::nullopt, value_column, error, time_column, budget);
-  if (!preview.has_value()) {
-    app.status = error;
-    return;
+  series_cfg.name = make_series_name(source, series_cfg.table_name, value_column);
+  if (const auto inferred_time = default_time_column(*table); !inferred_time.empty()) {
+    series_cfg.time_column = inferred_time;
   }
-
-  series_cfg.name = preview->name;
-  series_cfg.time_column = time_column;
 
   auto& tab = active_tab(app);
   tab.series.push_back(std::move(series_cfg));
   tab.active_series_index = tab.series.size() - 1;
-  app.status = "Added " + preview->name;
+  app.status = "Added " + tab.series.back().name;
   rebuild_cache(app);
 }
 
@@ -535,52 +638,45 @@ bool series_matches_binding(
 } // namespace
 
 std::vector<BindableParameter> list_bindable_parameters(const OpenSource& source) {
-  std::vector<BindableParameter> parameters;
-  for (const auto& table : source.catalog.tables) {
-    const auto time_column = tsv::infer_time_column(table.columns);
-    for (const auto& column : table.columns) {
-      if (time_column.has_value() && column.name == *time_column) {
-        continue;
-      }
-
-      BindableParameter parameter;
-      parameter.source_alias = source.alias;
-      parameter.source_path = source.catalog.path.string();
-      parameter.value_column = column.name;
-      if (source.catalog.kind == tsv::SourceKind::Sqlite) {
-        parameter.table_name = table.name;
-        parameter.display_name = source.alias + "." + table.name + "." + column.name;
-      } else {
-        parameter.display_name = source.alias + "." + column.name;
-      }
-      parameters.push_back(std::move(parameter));
-    }
-  }
-
-  std::sort(parameters.begin(), parameters.end(), [](const BindableParameter& lhs, const BindableParameter& rhs) {
-    return lhs.display_name < rhs.display_name;
-  });
-  return parameters;
+  const auto& parameters = bindable_parameters(source);
+  return {parameters.begin(), parameters.end()};
 }
 
 tsv::TreeNode build_bindable_parameter_tree(const OpenSource& source) {
-  std::vector<std::string> names;
-  names.reserve(source.catalog.tables.size() * 4);
-  for (const auto& parameter : list_bindable_parameters(source)) {
-    names.push_back(parameter.display_name);
-  }
-  return tsv::build_variable_tree(names);
+  return bindable_parameter_tree(source);
 }
 
 std::optional<BindableParameter> find_bindable_parameter(const OpenSource& source, const std::string& display_name) {
-  const auto parameters = list_bindable_parameters(source);
-  const auto it = std::find_if(parameters.begin(), parameters.end(), [&](const BindableParameter& parameter) {
-    return parameter.display_name == display_name;
-  });
-  if (it == parameters.end()) {
+  const auto* parameter = lookup_bindable_parameter(source, display_name);
+  if (parameter == nullptr) {
     return std::nullopt;
   }
-  return *it;
+  return *parameter;
+}
+
+const std::vector<BindableParameter>& bindable_parameters(const OpenSource& source) {
+  if (!source.bindable_parameter_cache_ready) {
+    rebuild_bindable_parameter_cache(source);
+  }
+  return source.bindable_parameter_cache;
+}
+
+const tsv::TreeNode& bindable_parameter_tree(const OpenSource& source) {
+  if (!source.bindable_parameter_cache_ready) {
+    rebuild_bindable_parameter_cache(source);
+  }
+  return source.bindable_parameter_tree_cache;
+}
+
+const BindableParameter* lookup_bindable_parameter(const OpenSource& source, const std::string& display_name) {
+  if (!source.bindable_parameter_cache_ready) {
+    rebuild_bindable_parameter_cache(source);
+  }
+  const auto it = source.bindable_parameter_lookup.find(display_name);
+  if (it == source.bindable_parameter_lookup.end()) {
+    return nullptr;
+  }
+  return &source.bindable_parameter_cache.at(it->second);
 }
 
 std::string plot_legend_label(const tsv::PlotSeriesConfig& series) {
