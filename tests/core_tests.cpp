@@ -1,12 +1,11 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 
-#include <filesystem>
 #include <fstream>
 #include <string>
 
-#include <sqlite3.h>
-
+#include "support/temp_dir.hpp"
+#include "support/sqlite_fixture.hpp"
 #include "timeseries_viewer/core.hpp"
 
 namespace fs = std::filesystem;
@@ -15,40 +14,6 @@ namespace {
 
 fs::path fixture_path(const std::string& name) {
   return fs::path(TSV_SOURCE_DIR) / "tests" / "fixtures" / name;
-}
-
-fs::path make_temp_dir() {
-  const auto base = fs::temp_directory_path() / "timeseries_viewer_tests";
-  fs::create_directories(base);
-  return base;
-}
-
-fs::path make_sqlite_fixture(const fs::path& path) {
-  std::error_code ec;
-  fs::remove(path, ec);
-  sqlite3* db = nullptr;
-  if (sqlite3_open(path.string().c_str(), &db) != SQLITE_OK) {
-    throw std::runtime_error(sqlite3_errmsg(db));
-  }
-
-  const char* schema =
-    "CREATE TABLE telemetry (timestamp TEXT, speed REAL, altitude REAL);"
-    "INSERT INTO telemetry VALUES ('2024-01-01T00:00:00', 10.0, 100.0);"
-    "INSERT INTO telemetry VALUES ('2024-01-01T00:00:01', 11.0, 101.0);"
-    "INSERT INTO telemetry VALUES ('2024-01-01T00:00:02', 12.0, 102.0);"
-    "CREATE TABLE metadata (id INTEGER, label TEXT);"
-    "INSERT INTO metadata VALUES (1, 'alpha');"
-    "INSERT INTO metadata VALUES (2, 'beta');";
-
-  char* error = nullptr;
-  if (sqlite3_exec(db, schema, nullptr, nullptr, &error) != SQLITE_OK) {
-    const std::string message = error != nullptr ? error : "unknown sqlite error";
-    sqlite3_free(error);
-    sqlite3_close(db);
-    throw std::runtime_error(message);
-  }
-  sqlite3_close(db);
-  return path;
 }
 
 } // namespace
@@ -82,7 +47,7 @@ TEST_CASE("CSV time-column override is honored", "[csv]") {
 }
 
 TEST_CASE("SQLite import detects tables and columns", "[sqlite]") {
-  const auto temp_db = make_sqlite_fixture(make_temp_dir() / "fixture.sqlite");
+  const auto temp_db = tsv::test::make_sqlite_fixture(tsv::test::make_temp_dir("timeseries_viewer_tests") / "fixture.sqlite");
   const auto catalog = tsv::load_sqlite_catalog(temp_db);
   REQUIRE(catalog.kind == tsv::SourceKind::Sqlite);
   REQUIRE(catalog.tables.size() == 2);
@@ -93,7 +58,7 @@ TEST_CASE("SQLite import detects tables and columns", "[sqlite]") {
 }
 
 TEST_CASE("SQLite import supports explicit time-column override", "[sqlite]") {
-  const auto temp_db = make_sqlite_fixture(make_temp_dir() / "override.sqlite");
+  const auto temp_db = tsv::test::make_sqlite_fixture(tsv::test::make_temp_dir("timeseries_viewer_tests") / "override.sqlite");
   const auto outcome = tsv::load_sqlite_series(
     temp_db,
     "telemetry",
@@ -193,7 +158,7 @@ TEST_CASE("Project JSON round-trips", "[project]") {
     0
   });
 
-  const auto temp = make_temp_dir() / "project.json";
+  const auto temp = tsv::test::make_temp_dir("timeseries_viewer_tests") / "project.json";
   tsv::save_project(temp, state);
   const auto loaded = tsv::load_project(temp);
   REQUIRE(loaded == state);
@@ -306,7 +271,7 @@ TEST_CASE("Workspace layout round-trips across multiple windows and tabs", "[pro
     0
   });
 
-  const auto temp = make_temp_dir() / "workspace.json";
+  const auto temp = tsv::test::make_temp_dir("timeseries_viewer_tests") / "workspace.json";
   tsv::save_project(temp, state);
   const auto loaded = tsv::load_project(temp);
   REQUIRE(loaded == state);
@@ -317,7 +282,7 @@ TEST_CASE("Workspace layout round-trips across multiple windows and tabs", "[pro
 }
 
 TEST_CASE("Legacy project views load into a workspace", "[project]") {
-  const auto temp = make_temp_dir() / "legacy_project.json";
+  const auto temp = tsv::test::make_temp_dir("timeseries_viewer_tests") / "legacy_project.json";
   const nlohmann::json legacy = {
     {"sources", {
       {
@@ -358,7 +323,7 @@ TEST_CASE("Legacy project views load into a workspace", "[project]") {
 }
 
 TEST_CASE("Missing variables are reported after reload", "[reload]") {
-  const auto temp_dir = make_temp_dir();
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_tests");
   const auto source = temp_dir / "reload.csv";
   {
     std::ofstream out(source);

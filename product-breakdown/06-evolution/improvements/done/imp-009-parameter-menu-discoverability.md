@@ -39,4 +39,4 @@ UC-04 requires an explicit selection surface where users can see which source ea
 ## Implementation Notes
 
 - The parameter browser groups bindable parameters under each open source and shows the backing source path in the panel.
-- The UI keeps source bindings explicit and supports rebinding the currently selected series from the tree.
+- The UI keeps source bindings explicit and supports rebinding the currently selected series from the selected-series editor, while the tree itself only adds or removes variables via tickboxes.

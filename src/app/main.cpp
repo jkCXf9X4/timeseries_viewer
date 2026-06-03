@@ -24,6 +24,16 @@ namespace fs = std::filesystem;
 
 namespace {
 
+std::string with_hidden_id(std::string_view label, std::string_view id) {
+  if (id.empty()) {
+    return std::string(label);
+  }
+  std::string result(label);
+  result += "##";
+  result += id;
+  return result;
+}
+
 struct ImGuiBackend {
   bool begin_window(std::string_view title, std::string_view) {
     const std::string label(title);
@@ -34,30 +44,30 @@ struct ImGuiBackend {
     ImGui::End();
   }
 
-  bool button(std::string_view label, std::string_view) {
-    const std::string text(label);
+  bool button(std::string_view label, std::string_view id) {
+    const std::string text = with_hidden_id(label, id);
     return ImGui::Button(text.c_str());
   }
 
-  bool small_button(std::string_view label, std::string_view) {
-    const std::string text(label);
+  bool small_button(std::string_view label, std::string_view id) {
+    const std::string text = with_hidden_id(label, id);
     return ImGui::SmallButton(text.c_str());
   }
 
-  bool selectable(std::string_view label, bool selected, std::string_view) {
-    const std::string text(label);
+  bool selectable(std::string_view label, bool selected, std::string_view id) {
+    const std::string text = with_hidden_id(label, id);
     return ImGui::Selectable(text.c_str(), selected);
   }
 
-  bool checkbox(std::string_view label, bool& value, std::string_view) {
-    const std::string text(label);
+  bool checkbox(std::string_view label, bool& value, std::string_view id) {
+    const std::string text = with_hidden_id(label, id);
     return ImGui::Checkbox(text.c_str(), &value);
   }
 
-  bool input_text(std::string_view label, std::string& value, std::string_view) {
+  bool input_text(std::string_view label, std::string& value, std::string_view id) {
     std::vector<char> buffer(1024, '\0');
     std::snprintf(buffer.data(), buffer.size(), "%s", value.c_str());
-    const std::string text(label);
+    const std::string text = with_hidden_id(label, id);
     if (ImGui::InputText(text.c_str(), buffer.data(), buffer.size())) {
       value = buffer.data();
       return true;
@@ -65,18 +75,18 @@ struct ImGuiBackend {
     return false;
   }
 
-  bool input_u64(std::string_view label, std::uint64_t& value, std::string_view) {
-    const std::string text(label);
+  bool input_u64(std::string_view label, std::uint64_t& value, std::string_view id) {
+    const std::string text = with_hidden_id(label, id);
     return ImGui::InputScalar(text.c_str(), ImGuiDataType_U64, &value);
   }
 
-  bool input_double_range(std::string_view label, std::array<double, 2>& value, std::string_view) {
-    const std::string text(label);
+  bool input_double_range(std::string_view label, std::array<double, 2>& value, std::string_view id) {
+    const std::string text = with_hidden_id(label, id);
     return ImGui::InputScalarN(text.c_str(), ImGuiDataType_Double, value.data(), 2);
   }
 
-  bool begin_combo(std::string_view label, std::string_view preview, std::string_view) {
-    const std::string combo_label(label);
+  bool begin_combo(std::string_view label, std::string_view preview, std::string_view id) {
+    const std::string combo_label = with_hidden_id(label, id);
     const std::string combo_preview(preview);
     return ImGui::BeginCombo(combo_label.c_str(), combo_preview.c_str());
   }
@@ -85,8 +95,8 @@ struct ImGuiBackend {
     ImGui::EndCombo();
   }
 
-  bool tree_node(std::string_view label, std::string_view) {
-    const std::string text(label);
+  bool tree_node(std::string_view label, std::string_view id) {
+    const std::string text = with_hidden_id(label, id);
     return ImGui::TreeNode(text.c_str());
   }
 
@@ -129,8 +139,8 @@ struct ImGuiBackend {
     ImGui::EndTabBar();
   }
 
-  bool begin_tab_item(std::string_view label, bool, std::string_view) {
-    const std::string text(label);
+  bool begin_tab_item(std::string_view label, bool, std::string_view id) {
+    const std::string text = with_hidden_id(label, id);
     return ImGui::BeginTabItem(text.c_str());
   }
 
@@ -194,14 +204,14 @@ struct ImGuiBackend {
     ImGui::PopID();
   }
 
-  bool color_edit4(std::string_view label, std::array<double, 4>& value, std::string_view) {
+  bool color_edit4(std::string_view label, std::array<double, 4>& value, std::string_view id) {
     float color[4] = {
       static_cast<float>(value[0]),
       static_cast<float>(value[1]),
       static_cast<float>(value[2]),
       static_cast<float>(value[3])
     };
-    const std::string text(label);
+    const std::string text = with_hidden_id(label, id);
     if (ImGui::ColorEdit4(text.c_str(), color, ImGuiColorEditFlags_NoInputs)) {
       for (std::size_t index = 0; index < 4; ++index) {
         value[index] = color[index];

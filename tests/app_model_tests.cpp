@@ -7,16 +7,12 @@
 
 #include "timeseries_viewer/app_model.hpp"
 #include "support/gui_harness.hpp"
+#include "support/sqlite_fixture.hpp"
+#include "support/temp_dir.hpp"
 
 namespace fs = std::filesystem;
 
 namespace {
-
-fs::path make_temp_dir() {
-  const auto base = fs::temp_directory_path() / "timeseries_viewer_app_model_tests";
-  fs::create_directories(base);
-  return base;
-}
 
 fs::path write_csv(const fs::path& path, int rows, double speed_scale = 1.0) {
   std::ofstream out(path);
@@ -42,7 +38,7 @@ TEST_CASE("Workspace state keeps per-tab expression drafts isolated", "[app][wor
 }
 
 TEST_CASE("Binding manager can rebind a selected series across sources", "[app][binding]") {
-  const auto temp_dir = make_temp_dir();
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_app_model_tests");
   const auto source_a = write_csv(temp_dir / "run_a.csv", 5, 1.0);
   const auto source_b = write_csv(temp_dir / "run_b.csv", 5, 2.0);
 
@@ -59,7 +55,7 @@ TEST_CASE("Binding manager can rebind a selected series across sources", "[app][
 }
 
 TEST_CASE("Large series are downsampled to the configured point budget", "[app][scale]") {
-  const auto temp_dir = make_temp_dir();
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_app_model_tests");
   const auto source = write_csv(temp_dir / "large.csv", 100, 1.0);
 
   tsv::app::AppState app;
@@ -78,7 +74,7 @@ TEST_CASE("Large series are downsampled to the configured point budget", "[app][
 }
 
 TEST_CASE("App project save/load preserves multi-tab state and point budget", "[app][project]") {
-  const auto temp_dir = make_temp_dir();
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_app_model_tests");
   const auto source_a = write_csv(temp_dir / "project_run_a.csv", 8, 1.0);
   const auto source_b = write_csv(temp_dir / "project_run_b.csv", 8, 2.0);
   const auto project_file = temp_dir / "project.json";
@@ -106,8 +102,47 @@ TEST_CASE("App project save/load preserves multi-tab state and point budget", "[
   REQUIRE(loaded.state().workspace.windows[0].tabs[1].series.size() == 1);
 }
 
+TEST_CASE("GUI harness can open sqlite sources and compare them in one plot", "[app][sqlite][compare]") {
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_app_model_tests");
+  const auto sqlite_path = tsv::test::make_sqlite_fixture(temp_dir / "telemetry.sqlite");
+  const auto csv_path = write_csv(temp_dir / "telemetry.csv", 6, 2.0);
+
+  tsv::test::GuiHarness harness;
+  harness.open_sqlite(sqlite_path, "run_sql");
+  harness.open_source(csv_path, "run_csv");
+  harness.click_add_raw_to_active("run_sql", std::optional<std::string>{"telemetry"}, "speed");
+  harness.click_add_raw_to_active("run_csv", std::nullopt, "speed");
+
+  REQUIRE(harness.state().workspace.windows[0].tabs[0].series.size() == 2);
+  REQUIRE(harness.state().workspace.windows[0].tabs[0].series[0].source_alias == "run_sql");
+  REQUIRE(harness.state().workspace.windows[0].tabs[0].series[0].table_name == "telemetry");
+  REQUIRE(harness.state().workspace.windows[0].tabs[0].series[1].source_alias == "run_csv");
+  REQUIRE(harness.state().workspace.windows[0].tabs[0].series[1].table_name == std::nullopt);
+}
+
+TEST_CASE("Parameter selection stays isolated between tabs", "[app][selection]") {
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_app_model_tests");
+  const auto source = write_csv(temp_dir / "selection.csv", 5, 1.0);
+
+  tsv::test::GuiHarness harness;
+  harness.open_source(source, "run");
+  harness.click_new_tab(0, "secondary");
+
+  harness.select_tab(0, 0);
+  harness.click_add_raw_to_active("run", std::nullopt, "speed");
+  REQUIRE(harness.state().workspace.windows[0].tabs[0].series.size() == 1);
+  REQUIRE(harness.state().workspace.windows[0].tabs[1].series.empty());
+
+  harness.select_tab(0, 1);
+  harness.click_add_raw_to_active("run", std::nullopt, "altitude");
+  REQUIRE(harness.state().workspace.windows[0].tabs[0].series.size() == 1);
+  REQUIRE(harness.state().workspace.windows[0].tabs[0].series[0].name == "run.speed");
+  REQUIRE(harness.state().workspace.windows[0].tabs[1].series.size() == 1);
+  REQUIRE(harness.state().workspace.windows[0].tabs[1].series[0].name == "run.altitude");
+}
+
 TEST_CASE("App loader reconstructs legacy project bindings", "[app][project]") {
-  const auto temp_dir = make_temp_dir();
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_app_model_tests");
   const auto source = write_csv(temp_dir / "legacy.csv", 6, 1.0);
   const auto project_file = temp_dir / "legacy_project.json";
 
@@ -154,7 +189,7 @@ TEST_CASE("App loader reconstructs legacy project bindings", "[app][project]") {
 }
 
 TEST_CASE("GUI harness verifies the full scripted usage flow", "[app][harness]") {
-  const auto temp_dir = make_temp_dir();
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_app_model_tests");
   const auto source_a = write_csv(temp_dir / "harness_a.csv", 20, 1.0);
   const auto source_b = write_csv(temp_dir / "harness_b.csv", 20, 2.0);
   const auto project_file = temp_dir / "harness_project.json";

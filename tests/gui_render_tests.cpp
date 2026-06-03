@@ -8,18 +8,13 @@
 #include <vector>
 
 #include "support/scripted_gui_backend.hpp"
+#include "support/temp_dir.hpp"
 #include "timeseries_viewer/app_model.hpp"
 #include "timeseries_viewer/app_ui.hpp"
 
 namespace fs = std::filesystem;
 
 namespace {
-
-fs::path make_temp_dir() {
-  const auto base = fs::temp_directory_path() / "timeseries_viewer_gui_render_tests";
-  fs::create_directories(base);
-  return base;
-}
 
 fs::path write_csv(const fs::path& path, const std::vector<std::string>& headers, std::size_t rows, double scale = 1.0) {
   std::ofstream out(path);
@@ -51,7 +46,7 @@ fs::path write_csv(const fs::path& path, const std::vector<std::string>& headers
 } // namespace
 
 TEST_CASE("Rendered GUI workflow can open sources, browse parameters, bind, and save/load", "[ui][workflow]") {
-  const auto temp_dir = make_temp_dir();
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_gui_render_tests");
   const auto source_a = write_csv(
     temp_dir / "run_a.csv",
     {"time", "ECS_HW.consumerFeed.hh", "ECS_HW.consumerFeed.m", "ECS_HW.consumerRet.temp"},
@@ -103,12 +98,7 @@ TEST_CASE("Rendered GUI workflow can open sources, browse parameters, bind, and 
   tsv::ui::render_app(app, ui);
   REQUIRE(app.workspace.windows[1].tabs[1].active_series_index == 0);
 
-  ui.click("run_b.ECS_HW.consumerFeed.m::bind");
-  tsv::ui::render_app(app, ui);
-  REQUIRE(app.workspace.windows[1].tabs[1].series[0].name == "run_b.ECS_HW.consumerFeed.m");
-  REQUIRE(app.workspace.windows[1].tabs[1].series[1].name == "run_b.ECS_HW.consumerFeed.hh");
-
-  ui.set_text("w1_t1::expression-draft", "series(\"run_b.ECS_HW.consumerFeed.hh\") - series(\"run_b.ECS_HW.consumerFeed.m\")");
+  ui.set_text("w1_t1::expression-draft", "series(\"run_a.ECS_HW.consumerFeed.hh\") - series(\"run_b.ECS_HW.consumerFeed.hh\")");
   ui.click("w1_t1::add-derived");
   tsv::ui::render_app(app, ui);
   REQUIRE(app.workspace.windows[1].tabs[1].series.size() == 3);
@@ -128,7 +118,7 @@ TEST_CASE("Rendered GUI workflow can open sources, browse parameters, bind, and 
   REQUIRE(reloaded.workspace.windows.size() == 2);
   REQUIRE(reloaded.workspace.windows[1].tabs.size() == 2);
   REQUIRE(reloaded.workspace.windows[1].tabs[1].series.size() == 3);
-  REQUIRE(reloaded.workspace.windows[1].tabs[1].series[0].name == "run_b.ECS_HW.consumerFeed.m");
+  REQUIRE(reloaded.workspace.windows[1].tabs[1].series[0].name == "run_a.ECS_HW.consumerFeed.hh");
   REQUIRE(reloaded.workspace.windows[1].tabs[1].series[1].name == "run_b.ECS_HW.consumerFeed.hh");
   REQUIRE(reloaded.workspace.windows[1].tabs[1].series[2].derived);
 
@@ -136,7 +126,7 @@ TEST_CASE("Rendered GUI workflow can open sources, browse parameters, bind, and 
   tsv::ui::render_app(reloaded, recorder);
   REQUIRE(recorder.plot_labels.size() == 3);
   REQUIRE(std::any_of(recorder.plot_labels.begin(), recorder.plot_labels.end(), [](const std::string& label) {
-    return label.find("run_b.ECS_HW.consumerFeed.m") != std::string::npos;
+    return label.find("run_a.ECS_HW.consumerFeed.hh") != std::string::npos;
   }));
   REQUIRE(std::any_of(recorder.plot_labels.begin(), recorder.plot_labels.end(), [](const std::string& label) {
     return label.find("run_b.ECS_HW.consumerFeed.hh") != std::string::npos;
@@ -150,7 +140,7 @@ TEST_CASE("Rendered GUI workflow can open sources, browse parameters, bind, and 
 }
 
 TEST_CASE("Rendered variable browsing keeps parent nodes navigation-only and scales with many parameters", "[ui][browser]") {
-  const auto temp_dir = make_temp_dir();
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_gui_render_tests");
   std::vector<std::string> headers = {"time"};
   for (int i = 0; i < 40; ++i) {
     headers.push_back("ECS_HW.node" + std::to_string(i) + ".signal");
@@ -184,7 +174,7 @@ TEST_CASE("Rendered variable browsing keeps parent nodes navigation-only and sca
 }
 
 TEST_CASE("Rendered plot labels remain distinct for similar series names", "[ui][labels]") {
-  const auto temp_dir = make_temp_dir();
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_gui_render_tests");
   const auto source_a = write_csv(temp_dir / "label_a.csv", {"time", "speed"}, 8, 1.0);
   const auto source_b = write_csv(temp_dir / "label_b.csv", {"time", "speed"}, 8, 2.0);
 

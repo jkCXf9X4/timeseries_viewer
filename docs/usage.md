@@ -9,7 +9,7 @@
 5. Use the dotted-name tree to drill into nested variable groups.
 6. Tick the checkbox next to a non-time variable to add it to the active plot tab.
 7. Clear the checkbox to remove that variable from the active plot tab.
-8. Select an existing series first if you want the source browser to rebind that series instead of adding a new one.
+8. Rebind an existing series from the selected-series controls in the plot editor when you need a different source or column.
 
 ## Compare Sources
 
