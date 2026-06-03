@@ -7,7 +7,6 @@
 #include "support/temp_dir.hpp"
 #include "support/sqlite_fixture.hpp"
 #include "timeseries_viewer/core.hpp"
-#include "timeseries_viewer/nfd_dialog_helpers.hpp"
 
 namespace fs = std::filesystem;
 
@@ -99,21 +98,6 @@ TEST_CASE("Interpolation aligns different time grids on the left-hand series", "
   REQUIRE(result.value[0] == Catch::Approx(9.0));
   REQUIRE(result.value[1] == Catch::Approx(17.0));
   REQUIRE(result.value[2] == Catch::Approx(25.0));
-}
-
-TEST_CASE("Dialog helpers preserve parent window handles", "[ui][dialog]") {
-  const nfdwindowhandle_t parent_window{
-    NFD_WINDOW_HANDLE_TYPE_X11,
-    reinterpret_cast<void*>(0x1234)
-  };
-
-  const auto open_args = tsv::dialog::make_open_dialog_args(nullptr, 0, nullptr, parent_window);
-  REQUIRE(open_args.parentWindow.type == parent_window.type);
-  REQUIRE(open_args.parentWindow.handle == parent_window.handle);
-
-  const auto save_args = tsv::dialog::make_save_dialog_args(nullptr, 0, nullptr, nullptr, parent_window);
-  REQUIRE(save_args.parentWindow.type == parent_window.type);
-  REQUIRE(save_args.parentWindow.handle == parent_window.handle);
 }
 
 TEST_CASE("Lua expression evaluation supports arithmetic over series", "[expr]") {

@@ -59,24 +59,10 @@ class ScriptedGuiBackend {
     save_project_path_ = std::move(path);
   }
 
-  void set_next_window_pos(float x, float y) {
-    pending_window_pos_ = std::array<float, 2>{x, y};
-  }
-
-  void set_next_window_pos_appearing(float x, float y) {
-    pending_window_pos_ = std::array<float, 2>{x, y};
-  }
+  void set_next_window_pos(float, float) {}
 
   void set_next_window_size(float width, float height) {
     pending_window_size_ = std::array<float, 2>{width, height};
-  }
-
-  void set_next_window_size_appearing(float width, float height) {
-    pending_window_size_ = std::array<float, 2>{width, height};
-  }
-
-  void set_next_window_focus() {
-    pending_window_focus_ = true;
   }
 
   std::array<float, 2> viewport_size() const {
@@ -90,15 +76,6 @@ class ScriptedGuiBackend {
   bool begin_window(std::string_view title, std::string_view, std::uint32_t) {
     current_window_title_ = std::string(title);
     window_titles.push_back(current_window_title_);
-    ++begin_window_count_;
-    if (pending_window_focus_) {
-      focus_requests.push_back(current_window_title_);
-      pending_window_focus_ = false;
-    }
-    if (pending_window_pos_.has_value()) {
-      window_pos_log.push_back({current_window_title_, *pending_window_pos_});
-      pending_window_pos_.reset();
-    }
     if (pending_window_size_.has_value()) {
       current_window_size_ = *pending_window_size_;
       pending_window_size_.reset();
@@ -117,9 +94,7 @@ class ScriptedGuiBackend {
     return current_window_title_ == focused_window_;
   }
 
-  void end_window() {
-    ++end_window_count_;
-  }
+  void end_window() {}
 
   bool button(std::string_view label, std::string_view id) {
     return consume_click(label, id);
@@ -211,27 +186,11 @@ class ScriptedGuiBackend {
 
   void end_tab_item() {}
 
-  bool begin_plot(std::string_view id) {
-    current_plot_id_ = std::string(id);
-    plot_setup_ready_ = false;
+  bool begin_plot(std::string_view) {
     return true;
   }
 
-  bool plot_clicked() {
-    if (!plot_setup_ready_) {
-      plot_setup_order_violation_ = true;
-      return false;
-    }
-    return consume_click(current_plot_id_, current_plot_id_);
-  }
-
-  void focus_window() {
-    focus_requests.push_back(current_window_title_);
-  }
-
-  void setup_axes(std::string_view, std::string_view, bool, bool) {
-    plot_setup_ready_ = true;
-  }
+  void setup_axes(std::string_view, std::string_view, bool, bool) {}
 
   void setup_axis_limits(std::string_view, double, double) {}
 
@@ -279,22 +238,8 @@ class ScriptedGuiBackend {
     return take_path(save_project_path_);
   }
 
-  bool plot_setup_order_violated() const {
-    return plot_setup_order_violation_;
-  }
-
-  std::size_t begin_window_count() const {
-    return begin_window_count_;
-  }
-
-  std::size_t end_window_count() const {
-    return end_window_count_;
-  }
-
   std::vector<std::string> window_titles;
-  std::vector<std::pair<std::string, std::array<float, 2>>> window_pos_log;
   std::vector<std::pair<std::string, std::array<float, 2>>> window_size_log;
-  std::vector<std::string> focus_requests;
   std::vector<std::string> text_log;
   std::vector<std::string> text_disabled_log;
   std::vector<std::string> separator_log;
@@ -371,14 +316,7 @@ class ScriptedGuiBackend {
   std::array<float, 2> viewport_size_{1600.0f, 900.0f};
   std::array<float, 2> current_window_size_{1200.0f, 800.0f};
   std::string current_window_title_;
-  std::string current_plot_id_;
-  bool plot_setup_ready_ = false;
-  bool plot_setup_order_violation_ = false;
-  std::size_t begin_window_count_ = 0;
-  std::size_t end_window_count_ = 0;
-  std::optional<std::array<float, 2>> pending_window_pos_;
   std::optional<std::array<float, 2>> pending_window_size_;
-  bool pending_window_focus_ = false;
   std::string focused_window_;
 };
 

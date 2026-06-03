@@ -13,7 +13,6 @@ namespace tsv::ui {
 namespace detail {
 
 constexpr std::uint32_t kFixedSidebarFlags = 0x1u | 0x4u | 0x10u;
-constexpr std::uint32_t kNativeAnalysisWindowFlags = 0x1u | 0x2u | 0x4u | 0x10u;
 
 template <typename Ui>
 void render_active_plot_summary(tsv::app::AppState& app, Ui& ui) {
@@ -158,9 +157,6 @@ void render_plot_inspector(tsv::app::AppState& app, Ui& ui) {
     if (ui.button("Remove selected", scope + "::remove-selected")) {
       tsv::app::remove_series(app, window_index, tab_index, tab.active_series_index);
     }
-  } else {
-    ui.separator_text("Selected Series");
-    ui.text_disabled("No series selected");
   }
 
   ui.separator_text("Derived Series");
@@ -177,7 +173,6 @@ void render_parameter_panel(tsv::app::AppState& app, Ui& ui) {
   ui.set_next_window_size(app.parameter_panel_width, viewport[1]);
   ui.set_next_window_pos(0.0f, 0.0f);
   if (!ui.begin_window("Parameters", "parameters-window", kFixedSidebarFlags)) {
-    ui.end_window();
     return;
   }
 
@@ -246,90 +241,60 @@ void render_parameter_panel(tsv::app::AppState& app, Ui& ui) {
 }
 
 template <typename Ui>
-void render_analysis_window_content(tsv::app::AppState& app, Ui& ui, std::size_t window_index) {
-  auto& window = app.workspace.windows[window_index];
-
-  if (ui.window_focused()) {
-    app.active_window = static_cast<int>(window_index);
-  }
-
-  if (ui.button("New tab", std::string("window-new-tab-") + std::to_string(window_index))) {
-    tsv::app::add_tab(app, window_index);
-  }
-  ui.same_line();
-  ui.text_disabled(std::string("Window ") + std::to_string(window_index + 1));
-
-  if (ui.begin_tab_bar(std::string("tabs##") + std::to_string(window_index))) {
-    for (std::size_t tab_index = 0; tab_index < window.tabs.size(); ++tab_index) {
-      auto& tab = window.tabs[tab_index];
-      if (ui.begin_tab_item(tab.title, window.active_tab == tab_index, std::string("tab-") + std::to_string(window_index) + "-" + std::to_string(tab_index))) {
-        window.active_tab = tab_index;
-        app.active_window = static_cast<int>(window_index);
-        ui.focus_window();
-
-        if (ui.begin_plot(std::string("plot##") + std::to_string(window_index) + "_" + std::to_string(tab_index))) {
-          ui.setup_axes("time", "value", tab.autoscale_x, tab.autoscale_y);
-          if (!tab.autoscale_x && tab.x_range.has_value()) {
-            ui.setup_axis_limits("x", tab.x_range->at(0), tab.x_range->at(1));
-          }
-          if (!tab.autoscale_y && tab.y_range.has_value()) {
-            ui.setup_axis_limits("y", tab.y_range->at(0), tab.y_range->at(1));
-          }
-
-          if (ui.plot_clicked()) {
-            app.active_window = static_cast<int>(window_index);
-            window.active_tab = tab_index;
-            ui.focus_window();
-          }
-
-          for (const auto& series_cfg : tab.series) {
-            const auto it = app.series_cache.find(series_cfg.name);
-            if (it == app.series_cache.end()) {
-              continue;
-            }
-            const auto& series = it->second;
-            if (series_cfg.visible && !series.time.empty() && !series.value.empty()) {
-              ui.plot_line(tsv::app::plot_legend_label(series_cfg), series);
-            }
-          }
-          ui.end_plot();
-        }
-
-        ui.end_tab_item();
-      }
-    }
-    ui.end_tab_bar();
-  }
-}
-
-template <typename Ui>
-void render_analysis_window(tsv::app::AppState& app, Ui& ui, std::size_t window_index, bool focus_active_window) {
-  auto& window = app.workspace.windows[window_index];
-  const auto viewport = ui.viewport_size();
-  const float initial_x = app.parameter_panel_width + 24.0f + static_cast<float>(window_index % 4) * 36.0f;
-  const float initial_y = 24.0f + static_cast<float>(window_index % 4) * 36.0f;
-  const float available_width = viewport[0] - app.parameter_panel_width - app.plot_inspector_width - 80.0f;
-  const float initial_width = available_width > 640.0f ? available_width : 640.0f;
-  const float initial_height = viewport[1] > 120.0f ? viewport[1] - 120.0f : viewport[1];
-  ui.set_next_window_pos_appearing(initial_x, initial_y);
-  ui.set_next_window_size_appearing(initial_width, initial_height);
-  if (focus_active_window && window_index == static_cast<std::size_t>(app.active_window)) {
-    ui.set_next_window_focus();
-  }
-  if (!ui.begin_window(window.title, std::string("analysis-window-") + std::to_string(window_index), 0u)) {
-    ui.end_window();
-    return;
-  }
-
-  render_analysis_window_content(app, ui, window_index);
-  ui.end_window();
-}
-
-template <typename Ui>
-void render_analysis_windows(tsv::app::AppState& app, Ui& ui, bool focus_active_window) {
+void render_analysis_windows(tsv::app::AppState& app, Ui& ui) {
   tsv::app::ensure_workspace_defaults(app);
   for (std::size_t window_index = 0; window_index < app.workspace.windows.size(); ++window_index) {
-    render_analysis_window(app, ui, window_index, focus_active_window);
+    auto& window = app.workspace.windows[window_index];
+    if (!ui.begin_window(window.title, std::string("analysis-window-") + std::to_string(window_index), 0u)) {
+      continue;
+    }
+
+    if (ui.window_focused()) {
+      app.active_window = static_cast<int>(window_index);
+    }
+
+    if (ui.button("New tab", std::string("window-new-tab-") + std::to_string(window_index))) {
+      tsv::app::add_tab(app, window_index);
+    }
+    ui.same_line();
+    ui.text_disabled(std::string("Window ") + std::to_string(window_index + 1));
+
+    if (ui.begin_tab_bar(std::string("tabs##") + std::to_string(window_index))) {
+      for (std::size_t tab_index = 0; tab_index < window.tabs.size(); ++tab_index) {
+        auto& tab = window.tabs[tab_index];
+        if (ui.begin_tab_item(tab.title, window.active_tab == tab_index, std::string("tab-") + std::to_string(window_index) + "-" + std::to_string(tab_index))) {
+          window.active_tab = tab_index;
+          app.active_window = static_cast<int>(window_index);
+
+          if (ui.begin_plot(std::string("plot##") + std::to_string(window_index) + "_" + std::to_string(tab_index))) {
+            ui.setup_axes("time", "value", tab.autoscale_x, tab.autoscale_y);
+            if (!tab.autoscale_x && tab.x_range.has_value()) {
+              ui.setup_axis_limits("x", tab.x_range->at(0), tab.x_range->at(1));
+            }
+            if (!tab.autoscale_y && tab.y_range.has_value()) {
+              ui.setup_axis_limits("y", tab.y_range->at(0), tab.y_range->at(1));
+            }
+
+            for (const auto& series_cfg : tab.series) {
+              const auto it = app.series_cache.find(series_cfg.name);
+              if (it == app.series_cache.end()) {
+                continue;
+              }
+              const auto& series = it->second;
+              if (series_cfg.visible && !series.time.empty() && !series.value.empty()) {
+                ui.plot_line(tsv::app::plot_legend_label(series_cfg), series);
+              }
+            }
+            ui.end_plot();
+          }
+
+          ui.end_tab_item();
+        }
+      }
+      ui.end_tab_bar();
+    }
+
+    ui.end_window();
   }
 }
 
@@ -341,7 +306,6 @@ void render_plot_inspector_panel(tsv::app::AppState& app, Ui& ui) {
   const auto x = viewport[0] - app.plot_inspector_width;
   ui.set_next_window_pos(x, 0.0f);
   if (!ui.begin_window("Plot Inspector", "plot-inspector-window", kFixedSidebarFlags)) {
-    ui.end_window();
     return;
   }
 
@@ -354,48 +318,10 @@ void render_plot_inspector_panel(tsv::app::AppState& app, Ui& ui) {
 
 template <typename Ui>
 void render_app(tsv::app::AppState& app, Ui& ui) {
-  const bool refresh_layout_before_frame = app.layout_refresh_requested;
-  detail::render_analysis_windows(app, ui, false);
+  detail::render_analysis_windows(app, ui);
   detail::render_parameter_panel(app, ui);
   detail::render_plot_inspector_panel(app, ui);
-  if (refresh_layout_before_frame || app.layout_refresh_requested) {
-    app.layout_refresh_requested = false;
-    detail::render_analysis_windows(app, ui, true);
-  }
   app.sidebar_layout_initialized = true;
-}
-
-template <typename Ui>
-void render_main_native_app(tsv::app::AppState& app, Ui& ui) {
-  const bool refresh_layout_before_frame = app.layout_refresh_requested;
-  tsv::app::ensure_workspace_defaults(app);
-  detail::render_analysis_window(app, ui, 0, false);
-  detail::render_parameter_panel(app, ui);
-  detail::render_plot_inspector_panel(app, ui);
-  if (refresh_layout_before_frame || app.layout_refresh_requested) {
-    app.layout_refresh_requested = false;
-    detail::render_analysis_window(app, ui, 0, true);
-  }
-  app.sidebar_layout_initialized = true;
-}
-
-template <typename Ui>
-void render_native_analysis_window(tsv::app::AppState& app, Ui& ui, std::size_t window_index) {
-  tsv::app::ensure_workspace_defaults(app);
-  if (window_index >= app.workspace.windows.size()) {
-    return;
-  }
-
-  const auto viewport = ui.viewport_size();
-  ui.set_next_window_pos(0.0f, 0.0f);
-  ui.set_next_window_size(viewport[0], viewport[1]);
-  auto& window = app.workspace.windows[window_index];
-  if (!ui.begin_window(window.title, std::string("native-analysis-window-") + std::to_string(window_index), detail::kNativeAnalysisWindowFlags)) {
-    ui.end_window();
-    return;
-  }
-  detail::render_analysis_window_content(app, ui, window_index);
-  ui.end_window();
 }
 
 } // namespace tsv::ui

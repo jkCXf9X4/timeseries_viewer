@@ -60,7 +60,6 @@ struct AppState {
   float parameter_panel_width{360.0f};
   float plot_inspector_width{420.0f};
   bool sidebar_layout_initialized{false};
-  bool layout_refresh_requested{false};
 };
 
 std::string sanitize_identifier(std::string value);
