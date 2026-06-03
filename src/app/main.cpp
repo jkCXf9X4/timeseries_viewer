@@ -215,9 +215,17 @@ struct ImGuiBackend {
     }
   }
 
-  void plot_line(std::string_view label, const tsv::SeriesData& series) {
+  void plot_line(std::string_view label, const tsv::SeriesData& series, const std::array<double, 4>& color) {
     const std::string text(label);
-    ImPlot::PlotLine(text.c_str(), series.time.data(), series.value.data(), static_cast<int>(series.time.size()));
+    const ImPlotSpec spec{
+      ImPlotProp_LineColor, ImVec4(
+        static_cast<float>(color[0]),
+        static_cast<float>(color[1]),
+        static_cast<float>(color[2]),
+        static_cast<float>(color[3])
+      )
+    };
+    ImPlot::PlotLine(text.c_str(), series.time.data(), series.value.data(), static_cast<int>(series.time.size()), spec);
   }
 
   void end_plot() {

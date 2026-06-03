@@ -39,6 +39,10 @@ class ScriptedGuiBackend {
     checkbox_values_[std::move(id_or_label)] = value;
   }
 
+  void set_color(std::string id_or_label, std::array<double, 4> value) {
+    color_values_[std::move(id_or_label)] = value;
+  }
+
   void set_u64(std::string id_or_label, std::uint64_t value) {
     u64_values_[std::move(id_or_label)] = value;
   }
@@ -199,8 +203,9 @@ class ScriptedGuiBackend {
 
   void setup_axis_limits(std::string_view, double, double) {}
 
-  void plot_line(std::string_view label, const tsv::SeriesData&) {
+  void plot_line(std::string_view label, const tsv::SeriesData&, const std::array<double, 4>& color) {
     plot_labels.push_back(std::string(label));
+    plot_colors.push_back(color);
   }
 
   void end_plot() {}
@@ -249,6 +254,7 @@ class ScriptedGuiBackend {
   std::vector<std::string> text_disabled_log;
   std::vector<std::string> separator_log;
   std::vector<std::string> plot_labels;
+  std::vector<std::array<double, 4>> plot_colors;
 
  private:
   bool consume_click(std::string_view label, std::string_view id) {

@@ -129,6 +129,62 @@ TEST_CASE("Live reload refreshes changed file data", "[app][reload][live]") {
   REQUIRE(app.status == "Live data refreshed");
 }
 
+TEST_CASE("Live reload refreshes sqlite sidecar writes", "[app][reload][live][sqlite]") {
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_app_model_tests");
+  const auto sqlite_path = tsv::test::make_sqlite_fixture(temp_dir / "live_reload.sqlite");
+
+  tsv::app::AppState app;
+  tsv::app::ensure_workspace_defaults(app);
+  app.live_mode = true;
+  tsv::app::open_source(app, sqlite_path, "run_sql", tsv::SourceKind::Sqlite);
+
+  const auto src = std::find_if(app.sources.begin(), app.sources.end(), [&](const auto& item) {
+    return item.alias == "run_sql";
+  });
+  REQUIRE(src != app.sources.end());
+
+  tsv::app::add_raw_series(app, *src, "telemetry", "speed");
+  REQUIRE(app.series_cache.contains("run_sql.telemetry.speed"));
+  REQUIRE(app.series_cache.at("run_sql.telemetry.speed").value.back() == Catch::Approx(12.0));
+
+  sqlite3* db = nullptr;
+  REQUIRE(sqlite3_open(sqlite_path.string().c_str(), &db) == SQLITE_OK);
+  const auto close_db = [&]() {
+    if (db != nullptr) {
+      sqlite3_close(db);
+      db = nullptr;
+    }
+  };
+
+  char* error = nullptr;
+  REQUIRE(sqlite3_exec(db, "PRAGMA journal_mode=WAL;", nullptr, nullptr, &error) == SQLITE_OK);
+  if (error != nullptr) {
+    sqlite3_free(error);
+    error = nullptr;
+  }
+
+  REQUIRE(sqlite3_exec(
+    db,
+    "UPDATE telemetry SET speed = 50.0 WHERE timestamp = '2024-01-01T00:00:02';",
+    nullptr,
+    nullptr,
+    &error
+  ) == SQLITE_OK);
+  if (error != nullptr) {
+    sqlite3_free(error);
+    error = nullptr;
+  }
+
+  app.last_poll = std::chrono::steady_clock::now() - std::chrono::seconds(2);
+  tsv::app::poll_live_reload(app);
+
+  REQUIRE(app.series_cache.contains("run_sql.telemetry.speed"));
+  REQUIRE(app.series_cache.at("run_sql.telemetry.speed").value.back() == Catch::Approx(50.0));
+  REQUIRE(app.status == "Live data refreshed");
+
+  close_db();
+}
+
 TEST_CASE("App project save/load preserves multi-tab state and point budget", "[app][project]") {
   const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_app_model_tests");
   const auto source_a = write_csv(temp_dir / "project_run_a.csv", 8, 1.0);

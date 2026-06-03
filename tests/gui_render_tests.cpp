@@ -232,6 +232,36 @@ TEST_CASE("Rendered plot labels remain distinct for similar series names", "[ui]
   }));
 }
 
+TEST_CASE("Rendered plot lines use the configured series color", "[ui][color]") {
+  const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_gui_render_tests");
+  const auto source = write_csv(temp_dir / "color.csv", {"time", "speed"}, 8, 1.0);
+
+  tsv::app::AppState app;
+  tsv::app::ensure_workspace_defaults(app);
+  tsv::app::open_source(app, source, "run", tsv::SourceKind::Csv);
+  tsv::app::rebuild_cache(app);
+
+  const auto src = std::find_if(app.sources.begin(), app.sources.end(), [&](const auto& item) {
+    return item.alias == "run";
+  });
+  REQUIRE(src != app.sources.end());
+
+  tsv::app::add_raw_series(app, *src, std::nullopt, "speed");
+
+  tsv::test::ScriptedGuiBackend edit_ui;
+  edit_ui.set_color("w0_t0::selected-color", {0.25, 0.5, 0.75, 1.0});
+  tsv::ui::render_app(app, edit_ui);
+
+  tsv::test::ScriptedGuiBackend recorder;
+  tsv::ui::render_app(app, recorder);
+
+  REQUIRE(recorder.plot_colors.size() == 1);
+  REQUIRE(recorder.plot_colors[0][0] == Catch::Approx(0.25));
+  REQUIRE(recorder.plot_colors[0][1] == Catch::Approx(0.5));
+  REQUIRE(recorder.plot_colors[0][2] == Catch::Approx(0.75));
+  REQUIRE(recorder.plot_colors[0][3] == Catch::Approx(1.0));
+}
+
 TEST_CASE("Rendered UI pins the parameter browser left and the plot inspector right", "[ui][layout]") {
   const auto temp_dir = tsv::test::make_temp_dir("timeseries_viewer_gui_render_tests");
   const auto source = write_csv(temp_dir / "layout.csv", {"time", "speed"}, 8, 1.0);

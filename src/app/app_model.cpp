@@ -41,6 +41,28 @@ std::string make_series_name(const OpenSource& source, const std::optional<std::
   return source.alias + "." + value_column;
 }
 
+std::optional<fs::file_time_type> source_stamp(const fs::path& path, tsv::SourceKind kind) {
+  std::optional<fs::file_time_type> stamp;
+  const auto consider = [&](const fs::path& candidate) {
+    std::error_code ec;
+    const auto current = fs::last_write_time(candidate, ec);
+    if (ec) {
+      return;
+    }
+    if (!stamp.has_value() || current > *stamp) {
+      stamp = current;
+    }
+  };
+
+  consider(path);
+  if (kind == tsv::SourceKind::Sqlite) {
+    consider(path.string() + "-wal");
+    consider(path.string() + "-shm");
+    consider(path.string() + "-journal");
+  }
+  return stamp;
+}
+
 template <typename Rows>
 std::optional<tsv::SeriesData> load_series_from_rows(
   const OpenSource& source,
@@ -388,8 +410,7 @@ void open_source(AppState& app, const fs::path& path, const std::optional<std::s
     source.catalog = kind == tsv::SourceKind::Csv ? tsv::load_csv_catalog(path) : tsv::load_sqlite_catalog(path);
     source.alias = alias_override.has_value() ? *alias_override : unique_alias(app.sources, path.stem().string());
     source.catalog.source_name = source.alias;
-    std::error_code ec;
-    source.last_write_time = fs::last_write_time(path, ec);
+    source.last_write_time = source_stamp(path, source.catalog.kind);
     app.sources.push_back(std::move(source));
     app.status = "Opened " + path.filename().string();
   } catch (const std::exception& ex) {
@@ -823,11 +844,7 @@ void load_project_file(AppState& app, const fs::path& path) {
 
 void reload_sources(AppState& app) {
   for (auto& source : app.sources) {
-    std::error_code ec;
-    const auto current = fs::last_write_time(source.catalog.path, ec);
-    if (!ec) {
-      source.last_write_time = current;
-    }
+    source.last_write_time = source_stamp(source.catalog.path, source.catalog.kind);
   }
 
   app.raw_series_cache.clear();
@@ -847,9 +864,8 @@ void poll_live_reload(AppState& app) {
 
   bool changed = false;
   for (auto& source : app.sources) {
-    std::error_code ec;
-    const auto current = fs::last_write_time(source.catalog.path, ec);
-    if (!ec && current != source.last_write_time) {
+    const auto current = source_stamp(source.catalog.path, source.catalog.kind);
+    if (current.has_value() && current != source.last_write_time) {
       source.last_write_time = current;
       changed = true;
     }

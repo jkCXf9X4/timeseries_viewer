@@ -112,16 +112,6 @@ void render_plot_inspector(tsv::app::AppState& app, Ui& ui) {
     if (ui.selectable(series.name, selected, series_key + "::select")) {
       tsv::app::select_series(app, window_index, tab_index, i);
     }
-    ui.same_line();
-    ui.checkbox("Visible", series.visible, series_key + "::visible");
-    ui.same_line();
-    ui.color_edit4("Color", series.color, series_key + "::color");
-    ui.same_line();
-    if (ui.small_button("Remove", series_key + "::remove")) {
-      tsv::app::remove_series(app, window_index, tab_index, i);
-      ui.pop_id();
-      break;
-    }
     ui.pop_id();
   }
 
@@ -289,8 +279,8 @@ void render_analysis_windows(tsv::app::AppState& app, Ui& ui) {
                 continue;
               }
               const auto& series = it->second;
-              if (series_cfg.visible && !series.time.empty() && !series.value.empty()) {
-                ui.plot_line(tsv::app::plot_legend_label(series_cfg), series);
+            if (series_cfg.visible && !series.time.empty() && !series.value.empty()) {
+                ui.plot_line(tsv::app::plot_legend_label(series_cfg), series, series_cfg.color);
               }
             }
             ui.end_plot();
