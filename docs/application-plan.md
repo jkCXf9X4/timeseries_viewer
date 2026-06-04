@@ -158,6 +158,62 @@ The project file stores:
 Paths should be stored relative to the project file when possible. Absolute
 paths are preserved when a relative path cannot be represented safely.
 
+## Architecture and Module Structure
+
+The codebase is organized into the following modules, matching the architecture
+boundaries described above:
+
+### `src/model/` — Canonical Data Types
+
+Defines the shared data model: time series, source metadata, plot state, view
+state, and variable registry types. All other modules depend on these types.
+
+### `src/io/csv/` — CSV Source Adapter
+
+Parses CSV files, infers column types (time, numeric, text), and normalizes
+columns into the canonical model. Handles header detection and time-column
+selection.
+
+### `src/io/sqlite/` — SQLite Source Adapter
+
+Inspects SQLite databases, discovers tables and columns, and normalizes
+selected table data into the canonical model. Supports user-overridable time
+column detection.
+
+### `src/expr/` — Expression Engine
+
+Wraps the Lua runtime (via sol2) for evaluating derived series expressions.
+Provides series lookup helpers and interpolation to align operands on a common
+time grid.
+
+### `src/persist/` — Persistence Layer
+
+Serializes and deserializes the full workspace state (sources, plots,
+expressions, visual settings) to and from project JSON files using the
+nlohmann-json library.
+
+### `src/ui/` — UI Rendering
+
+Contains all Dear ImGui / ImPlot rendering code, split into sub-areas:
+
+- `src/ui/panels/` — side panels (parameter browser, plot inspector)
+- `src/ui/plot/` — plot workspace and per-tab rendering
+- `src/ui/backend/` — ImGui backend integration (GLFW window, context setup)
+
+### `src/app/` — Application Model
+
+Holds the application-level state and orchestration logic, split into
+sub-modules:
+
+- `src/app/windows/` — window and tab ownership
+- `src/app/selection/` — parameter binding and source-to-variable mapping
+- `src/app/cache/` — in-memory time-series cache
+- `src/app/source/` — source lifecycle and refresh scheduling
+- `src/app/project/` — project open/save orchestration
+
+This structure ensures that source ingestion, expression evaluation,
+persistence, and UI rendering remain decoupled and independently testable.
+
 ## Initial Dependency Set
 
 Expected vcpkg dependencies:

@@ -16,6 +16,8 @@ Backlog and in-progress items live in `candidates/`; completed items live in `do
 ## Backlog
 
 - [IMP-004 Native top-level windows](candidates/imp-004-native-top-level-windows.md)
+- [IMP-027 Add module structure section to docs/application-plan.md](candidates/imp-027-application-plan-md.md)
+- [IMP-028 Add PB-012 to traceability-map.md](candidates/imp-028-traceability-map-pb-012.md)
 
 ## Done
 

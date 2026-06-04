@@ -13,6 +13,7 @@ This map links product intent to behavior, structure, implementation, verificati
 | Compare series in one view | Overlaid series plots | Shared time-series model | Plot view model and series registry | Comparison rendering tests | Keep view state recoverable after reload | Add richer comparison modes |
 | Plot `a - b` and similar expressions | Derived series from named inputs | Expression engine with interpolation | Lua/sol2 evaluator and alignment logic | Expression math and interpolation tests | Surface expression errors clearly | Add functions and reusable formulas |
 | Save views | Project files restore state | Persistence boundary | JSON serializer/deserializer | Round-trip and restore tests | Portable local project files | Add templates, presets, and export formats |
+| Navigate parameters and inspect plots through fixed side panels | Fixed left/right side panels that follow the active plot | PB-012 — parameter browser left, plot inspector right, both track active plot | UI shell panel layout with focus-follow wiring | Side panel positioning and focus-follow behavior tests | Side panel layout persists across sessions | Add user-customizable panel layout |
 
 ## Trace Links
 
