@@ -17,6 +17,9 @@
 
 namespace tsv {
 
+/// Quotes a SQLite identifier (table or column name) for safe use in SQL statements.
+/// @param value  The identifier to quote.
+/// @return The quoted identifier (e.g., `"my column"`).
 inline std::string sqlite_quote_identifier(std::string_view value) {
   std::string quoted = "\"";
   for (const char ch : value) {
@@ -27,6 +30,10 @@ inline std::string sqlite_quote_identifier(std::string_view value) {
   return quoted;
 }
 
+/// Fetches the list of user table names from a SQLite database.
+/// @param db  Open SQLite database handle.
+/// @return Vector of table names (excluding sqlite_% internal tables).
+/// @throws std::runtime_error if the query fails.
 inline std::vector<std::string> fetch_sqlite_tables(sqlite3* db) {
   std::vector<std::string> tables;
   const char* sql = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;";
@@ -42,6 +49,11 @@ inline std::vector<std::string> fetch_sqlite_tables(sqlite3* db) {
   return tables;
 }
 
+/// Fetches column metadata for a given table from a SQLite database.
+/// @param db         Open SQLite database handle.
+/// @param table_name  Name of the table to inspect.
+/// @return Vector of ColumnInfo describing each column.
+/// @throws std::runtime_error if the PRAGMA query fails.
 inline std::vector<ColumnInfo> fetch_sqlite_columns(sqlite3* db, const std::string& table_name) {
   std::vector<ColumnInfo> columns;
   const auto pragma = "PRAGMA table_info(" + sqlite_quote_identifier(table_name) + ");";
@@ -71,6 +83,10 @@ inline std::vector<ColumnInfo> fetch_sqlite_columns(sqlite3* db, const std::stri
 // Forward declaration needed by load_sqlite_catalog
 inline std::vector<std::vector<std::string>> read_sqlite_rows(sqlite3* db, const std::string& table_name, const std::vector<ColumnInfo>& columns, std::optional<std::size_t> limit = std::nullopt);
 
+/// Loads the full catalog (tables and columns) from a SQLite database.
+/// @param path  Path to the SQLite database file.
+/// @return SourceCatalog with all discovered tables and columns.
+/// @throws std::runtime_error if the database cannot be opened.
 inline SourceCatalog load_sqlite_catalog(const std::filesystem::path& path) {
   sqlite3* db = nullptr;
   if (sqlite3_open_v2(path.string().c_str(), &db, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK) {
@@ -111,6 +127,12 @@ inline SourceCatalog load_sqlite_catalog(const std::filesystem::path& path) {
   return catalog;
 }
 
+/// Loads a series from a SQLite table using pre-discovered column metadata.
+/// @param path       Path to the SQLite database file.
+/// @param table_name Name of the table to query.
+/// @param columns    Column metadata (from fetch_sqlite_columns).
+/// @param request    Series request specifying time/value columns and optional max points.
+/// @return LoadOutcome with the loaded series on success, or an error description on failure.
 inline LoadOutcome load_sqlite_series_targeted(const std::filesystem::path& path, const std::string& table_name, const std::vector<ColumnInfo>& columns, const SeriesRequest& request) {
   sqlite3* db = nullptr;
   if (sqlite3_open_v2(path.string().c_str(), &db, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK) {
@@ -170,6 +192,13 @@ inline LoadOutcome load_sqlite_series_targeted(const std::filesystem::path& path
   return LoadOutcome{true, std::move(series), {}};
 }
 
+/// Reads raw rows from a SQLite table, optionally limited.
+/// @param db         Open SQLite database handle.
+/// @param table_name Name of the table to read.
+/// @param columns    Column metadata (determines which columns are selected).
+/// @param limit      Optional maximum number of rows to read.
+/// @return Vector of rows, each row being a vector of string values.
+/// @throws std::runtime_error if the query fails.
 inline std::vector<std::vector<std::string>> read_sqlite_rows(sqlite3* db, const std::string& table_name, const std::vector<ColumnInfo>& columns, std::optional<std::size_t> limit) {
   std::vector<std::vector<std::string>> rows;
   if (columns.empty()) return rows;
@@ -203,6 +232,12 @@ inline std::vector<std::vector<std::string>> read_sqlite_rows(sqlite3* db, const
   return rows;
 }
 
+/// Convenience function: loads a series from a SQLite table in one call.
+/// Internally opens the database, fetches columns, then calls load_sqlite_series_targeted.
+/// @param path       Path to the SQLite database file.
+/// @param table_name Name of the table to query.
+/// @param request    Series request specifying time/value columns and optional max points.
+/// @return LoadOutcome with the loaded series on success, or an error description on failure.
 inline LoadOutcome load_sqlite_series(const std::filesystem::path& path, const std::string& table_name, const SeriesRequest& request) {
   sqlite3* db = nullptr;
   if (sqlite3_open_v2(path.string().c_str(), &db, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK) {

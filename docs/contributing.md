@@ -9,10 +9,20 @@
 
 ## Project Layout
 
-- `src/timeseries_viewer/core.hpp`: core data model, import, expression, and persistence helpers
+- `src/model/`: core data types, config, registry, equality operators, and utility functions
+- `src/io/csv/`: CSV source adapter (catalog loading, series streaming)
+- `src/io/sqlite/`: SQLite source adapter (table discovery, column inspection, series loading)
+- `src/expr/`: expression engine (Lua/sol2 evaluation, series arithmetic, interpolation)
+- `src/persist/`: persistence layer (JSON serialization, project save/load, path resolution)
+- `src/ui/`: UI rendering (panels/, plot/, backend/)
+- `src/app/`: app model (windows/, selection/, cache/, source/, project/)
+- `src/timeseries_viewer/app_model.hpp`: unified public header for the app model
+- `src/timeseries_viewer/core.hpp`: legacy forwarding header (being phased out)
 - `src/app/main.cpp`: GUI shell and application flow
 - `src/third_party/imgui/backends/`: vendored Dear ImGui backend glue
-- `tests/core_tests.cpp`: Catch2 coverage for the verification plan
+- `tests/core_tests.cpp`: Catch2 coverage for core data types, CSV/SQLite loading, expression engine
+- `tests/app_model_tests.cpp`: Catch2 coverage for app model behavior (using `GuiHarness`)
+- `tests/gui_render_tests.cpp`: Catch2 coverage for UI rendering (using `GuiHarness`)
 
 ## Adding Features
 

@@ -14,6 +14,10 @@
 
 namespace tsv {
 
+/// Loads the catalog (column metadata) from a CSV file.
+/// @param path  Path to the CSV file.
+/// @return A SourceCatalog with one table entry describing the columns.
+/// @throws std::runtime_error if the file cannot be opened or has no header row.
 inline SourceCatalog load_csv_catalog(const std::filesystem::path& path) {
   std::ifstream input(path);
   if (!input.is_open()) {
@@ -59,6 +63,11 @@ inline SourceCatalog load_csv_catalog(const std::filesystem::path& path) {
   return catalog;
 }
 
+/// Loads a series from a CSV file using pre-discovered column metadata.
+/// @param path     Path to the CSV file.
+/// @param columns  Column metadata (from load_csv_catalog).
+/// @param request  Series request specifying time/value columns and optional max points.
+/// @return LoadOutcome with the loaded series on success, or an error description on failure.
 inline LoadOutcome load_csv_series_streaming(const std::filesystem::path& path, const std::vector<ColumnInfo>& columns, const SeriesRequest& request) {
   std::ifstream input(path);
   if (!input.is_open()) {
@@ -113,6 +122,11 @@ inline LoadOutcome load_csv_series_streaming(const std::filesystem::path& path, 
   return LoadOutcome{true, std::move(series), {}};
 }
 
+/// Convenience function: loads a series from a CSV file in one call.
+/// Internally calls load_csv_catalog then load_csv_series_streaming.
+/// @param path     Path to the CSV file.
+/// @param request  Series request specifying time/value columns and optional max points.
+/// @return LoadOutcome with the loaded series on success, or an error description on failure.
 inline LoadOutcome load_csv_series(const std::filesystem::path& path, const SeriesRequest& request) {
   const auto catalog = load_csv_catalog(path);
   const auto& table = catalog.tables.at(0);

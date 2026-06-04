@@ -15,5 +15,6 @@ Root index of stable decisions recorded in the product breakdown.
 | PB-009 | 01-product | Saved views are project JSON files that restore sources, plots, and expressions | Recorded |
 | PB-010 | 02-architecture | Parameter selection is explicit and bound to the open source or database that provides the series | Recorded |
 | PB-011 | 02-architecture | The top-level analysis layout uses multiple simultaneous windows, each with multiple tabs, and each tab contains exactly one plot | Recorded |
+| PB-012 | 02-architecture | The parameter browser is fixed to the left side of the app, the plot inspector is fixed to the right side, and both panels follow the active plot | Recorded |
 
 Each decision is detailed in the layer where its consequences are most direct.

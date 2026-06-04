@@ -29,6 +29,14 @@ Verify the application can:
 - save and reopen a project
 - refresh when live mode is enabled
 
+## Test Files
+
+- `tests/core_tests.cpp` — Core data types, CSV/SQLite loading, expression engine
+- `tests/app_model_tests.cpp` — App model behavior (using `GuiHarness`)
+- `tests/gui_render_tests.cpp` — UI rendering (using `GuiHarness`)
+
+The `GuiHarness` test support class provides a simulated UI backend for testing app model and rendering logic without a real display.
+
 ## Test Fixtures
 
 - `tests/fixtures/sample_numeric.csv`

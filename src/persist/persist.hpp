@@ -18,6 +18,9 @@
 
 namespace tsv {
 
+/// Converts a SourceKind enum to its string representation.
+/// @param kind  The source kind.
+/// @return "csv" or "sqlite".
 inline std::string to_string(SourceKind kind) {
   switch (kind) {
     case SourceKind::Csv: return "csv";
@@ -26,6 +29,10 @@ inline std::string to_string(SourceKind kind) {
   return "csv";
 }
 
+/// Parses a SourceKind from its string representation.
+/// @param value  "csv" or "sqlite".
+/// @return The corresponding SourceKind.
+/// @throws std::runtime_error if the value is unknown.
 inline SourceKind source_kind_from_string(const std::string& value) {
   if (value == "csv") return SourceKind::Csv;
   if (value == "sqlite") return SourceKind::Sqlite;
@@ -128,6 +135,11 @@ inline void from_json(const nlohmann::json& j, ProjectState& project) {
   }
 }
 
+/// Computes a relative path from a project file to a target path, if the target is a descendant.
+/// Falls back to the absolute target path if the relative path would escape the project directory.
+/// @param project_file  Path to the project file.
+/// @param target        Path to make relative.
+/// @return The relative path if possible, otherwise the absolute target path.
 inline std::filesystem::path project_relative_path(const std::filesystem::path& project_file, const std::filesystem::path& target) {
   std::error_code ec;
   const auto relative = std::filesystem::relative(target, project_file.parent_path(), ec);
@@ -135,12 +147,21 @@ inline std::filesystem::path project_relative_path(const std::filesystem::path& 
   return target;
 }
 
+/// Resolves a potentially relative stored path against a project file's directory.
+/// @param project_file  Path to the project file.
+/// @param stored_path   The path as stored in the project file (may be relative).
+/// @return The resolved absolute path.
 inline std::filesystem::path resolve_project_path(const std::filesystem::path& project_file, const std::string& stored_path) {
   const std::filesystem::path stored(stored_path);
   if (stored.is_absolute()) return stored;
   return project_file.parent_path() / stored;
 }
 
+/// Saves the current project state to a JSON file.
+/// Source paths are stored relative to the project file when possible.
+/// @param file     Path to the output file.
+/// @param project  The project state to serialize.
+/// @throws std::runtime_error if the file cannot be opened for writing.
 inline void save_project(const std::filesystem::path& file, ProjectState project) {
   for (auto& source : project.sources) {
     source.path = project_relative_path(file, source.path).string();
@@ -151,6 +172,11 @@ inline void save_project(const std::filesystem::path& file, ProjectState project
   output << json.dump(2) << '\n';
 }
 
+/// Loads a project state from a JSON file.
+/// Source paths stored as relative are resolved against the project file's directory.
+/// @param file  Path to the project file.
+/// @return The deserialized ProjectState.
+/// @throws std::runtime_error if the file cannot be opened or parsed.
 inline ProjectState load_project(const std::filesystem::path& file) {
   std::ifstream input(file);
   if (!input.is_open()) throw std::runtime_error("Failed to open project file for reading: " + file.string());
