@@ -29,9 +29,14 @@ target_include_directories(timeseries_core INTERFACE ${LUA_INCLUDE_DIR})
 
 add_library(timeseries_app_model STATIC
   src/app/app_model.cpp
+  src/app/windows/workspace.cpp
+  src/app/selection/binding.cpp
+  src/app/cache.cpp
+  src/app/source.cpp
+  src/app/project.cpp
 )
 target_link_libraries(timeseries_app_model PUBLIC timeseries_core)
-target_include_directories(timeseries_app_model PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(timeseries_app_model PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/app)
 
 if(TSV_BUILD_APP)
   find_package(OpenGL REQUIRED)
@@ -43,6 +48,7 @@ if(TSV_BUILD_APP)
 
   add_executable(timeseries_viewer
     src/app/main.cpp
+    src/ui/backend/imgui_backend.cpp
     src/third_party/imgui/backends/imgui_impl_glfw.cpp
     src/third_party/imgui/backends/imgui_impl_opengl3.cpp
   )

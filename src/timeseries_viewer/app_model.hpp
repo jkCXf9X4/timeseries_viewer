@@ -36,7 +36,6 @@ struct SeriesBindingKey {
   std::optional<std::string> table_name;
   std::optional<std::string> time_column;
   std::string value_column;
-
   bool operator==(const SeriesBindingKey& other) const;
 };
 
@@ -67,14 +66,13 @@ struct AppState {
   bool sidebar_layout_initialized{false};
 };
 
+// Function declarations only
 std::string sanitize_identifier(std::string value);
 std::string unique_alias(const std::vector<OpenSource>& sources, const std::string& preferred);
-
 void ensure_workspace_defaults(AppState& app);
 tsv::AnalysisWindowConfig& active_window(AppState& app);
 tsv::PlotTabConfig& active_tab(AppState& app);
 const tsv::PlotTabConfig& active_tab(const AppState& app);
-
 void add_window(AppState& app, std::string title = {});
 void remove_window(AppState& app, std::size_t window_index);
 void add_tab(AppState& app, std::size_t window_index, std::string title = {});
@@ -82,23 +80,12 @@ void select_series(AppState& app, std::size_t window_index, std::size_t tab_inde
 void remove_series(AppState& app, std::size_t window_index, std::size_t tab_index, std::size_t series_index);
 void toggle_series_visibility(AppState& app, std::size_t window_index, std::size_t tab_index, std::size_t series_index, bool visible);
 void rename_series(AppState& app, std::size_t window_index, std::size_t tab_index, std::size_t series_index, const std::string& name);
-
 void open_source(AppState& app, const fs::path& path, const std::optional<std::string>& alias_override = std::nullopt, const std::optional<tsv::SourceKind>& kind_override = std::nullopt);
 void rebuild_cache(AppState& app);
 void add_raw_series(AppState& app, const OpenSource& source, const std::optional<std::string>& table_name, const std::string& value_column);
-void bind_series_to_source(
-  AppState& app,
-  std::size_t window_index,
-  std::size_t tab_index,
-  std::size_t series_index,
-  const OpenSource& source,
-  const std::optional<std::string>& table_name,
-  const std::string& value_column,
-  const std::optional<std::string>& time_column_override = std::nullopt
-);
+void bind_series_to_source(AppState& app, std::size_t window_index, std::size_t tab_index, std::size_t series_index, const OpenSource& source, const std::optional<std::string>& table_name, const std::string& value_column, const std::optional<std::string>& time_column_override = std::nullopt);
 void add_derived_series(AppState& app);
 void add_derived_series_to_tab(AppState& app, std::size_t window_index, std::size_t tab_index);
-
 [[nodiscard]] std::vector<BindableParameter> list_bindable_parameters(const OpenSource& source);
 [[nodiscard]] tsv::TreeNode build_bindable_parameter_tree(const OpenSource& source);
 [[nodiscard]] std::optional<BindableParameter> find_bindable_parameter(const OpenSource& source, const std::string& display_name);
@@ -106,35 +93,13 @@ void add_derived_series_to_tab(AppState& app, std::size_t window_index, std::siz
 [[nodiscard]] const tsv::TreeNode& bindable_parameter_tree(const OpenSource& source);
 [[nodiscard]] const BindableParameter* lookup_bindable_parameter(const OpenSource& source, const std::string& display_name);
 [[nodiscard]] std::string plot_legend_label(const tsv::PlotSeriesConfig& series);
-[[nodiscard]] bool parameter_is_selected(
-  const tsv::PlotTabConfig& tab,
-  const OpenSource& source,
-  const std::optional<std::string>& table_name,
-  const std::string& value_column
-);
-std::size_t remove_parameter_series(
-  AppState& app,
-  std::size_t window_index,
-  std::size_t tab_index,
-  const OpenSource& source,
-  const std::optional<std::string>& table_name,
-  const std::string& value_column
-);
-void set_parameter_selected(
-  AppState& app,
-  std::size_t window_index,
-  std::size_t tab_index,
-  const OpenSource& source,
-  const std::optional<std::string>& table_name,
-  const std::string& value_column,
-  bool selected
-);
-
+[[nodiscard]] bool parameter_is_selected(const tsv::PlotTabConfig& tab, const OpenSource& source, const std::optional<std::string>& table_name, const std::string& value_column);
+std::size_t remove_parameter_series(AppState& app, std::size_t window_index, std::size_t tab_index, const OpenSource& source, const std::optional<std::string>& table_name, const std::string& value_column);
+void set_parameter_selected(AppState& app, std::size_t window_index, std::size_t tab_index, const OpenSource& source, const std::optional<std::string>& table_name, const std::string& value_column, bool selected);
 void save_project_file(AppState& app, const fs::path& path);
 void load_project_file(AppState& app, const fs::path& path);
 void reload_sources(AppState& app);
 void poll_live_reload(AppState& app);
-
 void rebuild_cache_metadata(AppState& app);
 void ensure_tab_data(AppState& app, std::size_t window_index, std::size_t tab_index);
 

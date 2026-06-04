@@ -7,6 +7,7 @@
 #include "support/temp_dir.hpp"
 #include "support/sqlite_fixture.hpp"
 #include "timeseries_viewer/core.hpp"
+#include "io/sqlite/sqlite.hpp"
 
 namespace fs = std::filesystem;
 
