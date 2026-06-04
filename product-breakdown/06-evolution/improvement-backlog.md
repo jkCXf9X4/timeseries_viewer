@@ -16,7 +16,7 @@ This file tracks the remaining product improvements that are not required for th
 | IMP-001 | Richer plot editing controls | Done | No remove/rebind/visibility/axis/color editor for existing series | [done](improvements/done/imp-001-rich-plot-editing.md) |
 | IMP-002 | Dedicated parameter binding manager | Done | Parameter selection is explicit but still mostly add-from-tree | [done](improvements/done/imp-002-parameter-binding-manager.md) |
 | IMP-003 | Per-tab expression editor state | Done | Expression input is global instead of owned by each tab | [done](improvements/done/imp-003-per-tab-expression-editor.md) |
-| IMP-004 | Native top-level windows | Backlog | Multiple analysis windows are currently ImGui windows inside one OS window | [candidate](improvements/candidates/imp-004-native-top-level-windows.md) |
+| IMP-004 | Native top-level windows | Backlog | Multiple analysis windows are currently ImGui windows inside one OS window | [deferred](improvements/deferred/imp-004-native-top-level-windows.md) |
 | IMP-005 | GUI integration verification | Done | No automated end-to-end GUI interaction coverage | [done](improvements/done/imp-005-gui-integration-verification.md) |
 | IMP-006 | Large-data scaling strategy | Done | Medium-file in-memory loading is the current ceiling | [done](improvements/done/imp-006-large-data-scaling.md) |
 | IMP-007 | Rendered GUI workflow verification | Done | The harness is state-level only and does not exercise the shipped ImGui UI | [done](improvements/done/imp-007-rendered-gui-workflow-verification.md) |

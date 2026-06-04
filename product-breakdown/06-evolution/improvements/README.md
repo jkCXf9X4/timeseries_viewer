@@ -15,9 +15,7 @@ Backlog and in-progress items live in `candidates/`; completed items live in `do
 
 ## Backlog
 
-- [IMP-004 Native top-level windows](candidates/imp-004-native-top-level-windows.md)
-- [IMP-027 Add module structure section to docs/application-plan.md](candidates/imp-027-application-plan-md.md)
-- [IMP-028 Add PB-012 to traceability-map.md](candidates/imp-028-traceability-map-pb-012.md)
+- [IMP-004 Native top-level windows](deferred/imp-004-native-top-level-windows.md)
 
 ## Done
 
@@ -46,3 +44,5 @@ Backlog and in-progress items live in `candidates/`; completed items live in `do
 - [IMP-024 Update docs/verification.md for test files](done/imp-024-update-verification-md-test-files.md)
 - [IMP-025 Expand docs/changelog.md](done/imp-025-expand-changelog.md)
 - [IMP-026 Create undiscovered-improvements.md](done/imp-026-create-undiscovered-improvements.md)
+- [IMP-027 Add module structure section to docs/application-plan.md](done/imp-027-application-plan-md.md)
+- [IMP-028 Add PB-012 to traceability-map.md](done/imp-028-traceability-map-pb-012.md)
