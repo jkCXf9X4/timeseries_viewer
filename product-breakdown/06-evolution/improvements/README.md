@@ -16,6 +16,14 @@ Backlog and in-progress items live in `candidates/`; completed items live in `do
 ## Backlog
 
 - [IMP-004 Native top-level windows](candidates/imp-004-native-top-level-windows.md)
+- [IMP-011 Extract canonical model types](candidates/imp-011-model-types.md)
+- [IMP-012 Extract CSV source adapter](candidates/imp-012-csv-adapter.md)
+- [IMP-013 Extract SQLite source adapter](candidates/imp-013-sqlite-adapter.md)
+- [IMP-014 Extract expression engine](candidates/imp-014-expression-engine.md)
+- [IMP-015 Extract persistence layer](candidates/imp-015-persistence-layer.md)
+- [IMP-016 Restructure app model into domain sub-modules](candidates/imp-016-app-model-submodules.md)
+- [IMP-017 Isolate UI rendering from app model](candidates/imp-017-ui-rendering.md)
+- [IMP-018 Extract ImGui backend from main.cpp](candidates/imp-018-imgui-backend.md)
 
 ## Done
 
