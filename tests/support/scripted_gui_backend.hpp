@@ -115,6 +115,16 @@ class ScriptedGuiBackend {
 
   void end_window() {}
 
+  bool begin_popup_context_window() {
+    return consume_click("__context_window__", "__context_window__");
+  }
+
+  bool menu_item(std::string_view label, std::string_view id) {
+    return consume_click(label, id);
+  }
+
+  void end_popup() {}
+
   bool button(std::string_view label, std::string_view id) {
     return consume_click(label, id);
   }

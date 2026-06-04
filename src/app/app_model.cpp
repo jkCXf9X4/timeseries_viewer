@@ -355,6 +355,19 @@ void add_window(AppState& app, std::string title) {
   app.active_window = static_cast<int>(app.workspace.windows.size()) - 1;
 }
 
+void remove_window(AppState& app, std::size_t window_index) {
+  if (window_index >= app.workspace.windows.size()) {
+    return;
+  }
+  app.workspace.windows.erase(app.workspace.windows.begin() + static_cast<std::ptrdiff_t>(window_index));
+  if (app.workspace.windows.empty()) {
+    ensure_workspace_defaults(app);
+  }
+  if (app.active_window >= static_cast<int>(app.workspace.windows.size())) {
+    app.active_window = static_cast<int>(app.workspace.windows.size()) - 1;
+  }
+}
+
 void add_tab(AppState& app, std::size_t window_index, std::string title) {
   ensure_workspace_defaults(app);
   auto& window = app.workspace.windows.at(window_index);

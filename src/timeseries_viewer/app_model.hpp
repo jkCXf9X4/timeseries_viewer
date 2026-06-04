@@ -76,6 +76,7 @@ tsv::PlotTabConfig& active_tab(AppState& app);
 const tsv::PlotTabConfig& active_tab(const AppState& app);
 
 void add_window(AppState& app, std::string title = {});
+void remove_window(AppState& app, std::size_t window_index);
 void add_tab(AppState& app, std::size_t window_index, std::string title = {});
 void select_series(AppState& app, std::size_t window_index, std::size_t tab_index, std::size_t series_index);
 void remove_series(AppState& app, std::size_t window_index, std::size_t tab_index, std::size_t series_index);

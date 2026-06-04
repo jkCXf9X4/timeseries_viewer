@@ -93,6 +93,19 @@ struct ImGuiBackend {
     ImGui::End();
   }
 
+  bool begin_popup_context_window() {
+    return ImGui::BeginPopupContextWindow();
+  }
+
+  bool menu_item(std::string_view label, std::string_view id) {
+    const std::string text = with_hidden_id(label, id);
+    return ImGui::MenuItem(text.c_str());
+  }
+
+  void end_popup() {
+    ImGui::EndPopup();
+  }
+
   bool button(std::string_view label, std::string_view id) {
     const std::string text = with_hidden_id(label, id);
     return ImGui::Button(text.c_str());

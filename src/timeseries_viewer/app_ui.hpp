@@ -248,9 +248,11 @@ void render_status_bar(tsv::app::AppState& app, Ui& ui) {
 template <typename Ui>
 void render_analysis_windows(tsv::app::AppState& app, Ui& ui) {
   tsv::app::ensure_workspace_defaults(app);
-  for (std::size_t window_index = 0; window_index < app.workspace.windows.size(); ++window_index) {
+  std::size_t window_index = 0;
+  while (window_index < app.workspace.windows.size()) {
     auto& window = app.workspace.windows[window_index];
     if (!ui.begin_window(window.title, std::string("analysis-window-") + std::to_string(window_index), 0u)) {
+      ++window_index;
       continue;
     }
 
@@ -310,7 +312,20 @@ void render_analysis_windows(tsv::app::AppState& app, Ui& ui) {
       ui.end_tab_bar();
     }
 
+    bool removed = false;
+    if (ui.begin_popup_context_window()) {
+      if (ui.menu_item("Close", std::string("close-window-") + std::to_string(window_index))) {
+        tsv::app::remove_window(app, window_index);
+        removed = true;
+      }
+      ui.end_popup();
+    }
+
     ui.end_window();
+
+    if (!removed) {
+      ++window_index;
+    }
   }
 }
 
