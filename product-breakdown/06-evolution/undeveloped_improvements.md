@@ -1,3 +1,3 @@
 
 
-Make sure that the reload button actually reloads the full file only live view should utilize the incremental refresh
+Implement lazy loading of series to make the gui snappier and enable opening large files  

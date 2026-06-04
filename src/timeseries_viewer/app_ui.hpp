@@ -173,7 +173,7 @@ void render_parameter_panel(tsv::app::AppState& app, Ui& ui) {
   if (ui.button("Open", "open-source")) {
     if (const auto path = ui.open_source_dialog(); path.has_value()) {
       tsv::app::open_source(app, *path);
-      tsv::app::rebuild_cache(app);
+      tsv::app::rebuild_cache_metadata(app);
     }
   }
   ui.same_line();
@@ -273,6 +273,8 @@ void render_analysis_windows(tsv::app::AppState& app, Ui& ui) {
             window.active_tab = tab_index;
             app.active_window = static_cast<int>(window_index);
           }
+
+          tsv::app::ensure_tab_data(app, window_index, tab_index);
 
           const auto plot_size = ui.content_region_avail();
           if (ui.begin_plot(std::string("plot##") + std::to_string(window_index) + "_" + std::to_string(tab_index), {plot_size[0], plot_size[1]})) {

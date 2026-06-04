@@ -332,26 +332,30 @@ inline SourceCatalog load_csv_catalog(const std::filesystem::path& path) {
     throw std::runtime_error("CSV header row is empty: " + path.string());
   }
 
-  std::vector<std::vector<std::string>> rows;
+  std::vector<std::vector<std::string>> samples;
   std::string line;
+  constexpr std::size_t kSampleLimit = 1000;
   while (std::getline(input, line)) {
     if (trim(line).empty()) {
       continue;
     }
-    rows.push_back(split_csv_line(line));
+    samples.push_back(split_csv_line(line));
+    if (samples.size() >= kSampleLimit) {
+      break;
+    }
   }
 
   std::vector<ColumnInfo> columns;
   columns.reserve(headers.size());
   for (std::size_t index = 0; index < headers.size(); ++index) {
-    std::vector<std::string> samples;
-    samples.reserve(rows.size());
-    for (const auto& row : rows) {
+    std::vector<std::string> col_samples;
+    col_samples.reserve(samples.size());
+    for (const auto& row : samples) {
       if (index < row.size()) {
-        samples.push_back(row[index]);
+        col_samples.push_back(row[index]);
       }
     }
-    const auto kind = infer_column_kind(samples);
+    const auto kind = infer_column_kind(col_samples);
     columns.push_back(ColumnInfo{headers[index], kind, is_time_candidate(kind)});
   }
 
@@ -422,7 +426,7 @@ inline std::vector<ColumnInfo> fetch_sqlite_columns(sqlite3* db, const std::stri
   return columns;
 }
 
-inline std::vector<std::vector<std::string>> read_sqlite_rows(sqlite3* db, const std::string& table_name, const std::vector<ColumnInfo>& columns);
+inline std::vector<std::vector<std::string>> read_sqlite_rows(sqlite3* db, const std::string& table_name, const std::vector<ColumnInfo>& columns, std::optional<std::size_t> limit = std::nullopt);
 
 inline SourceCatalog load_sqlite_catalog(const std::filesystem::path& path) {
   sqlite3* db = nullptr;
@@ -440,6 +444,7 @@ inline SourceCatalog load_sqlite_catalog(const std::filesystem::path& path) {
   catalog.source_name = path.stem().string();
 
   const auto tables = fetch_sqlite_tables(db);
+  constexpr std::size_t kSampleLimit = 1000;
   for (const auto& table_name : tables) {
     TableCatalog table;
     table.name = table_name;
@@ -447,7 +452,7 @@ inline SourceCatalog load_sqlite_catalog(const std::filesystem::path& path) {
     if (table.columns.empty()) {
       continue;
     }
-    const auto rows = read_sqlite_rows(db, table_name, table.columns);
+    const auto rows = read_sqlite_rows(db, table_name, table.columns, kSampleLimit);
     for (std::size_t col = 0; col < table.columns.size(); ++col) {
       std::vector<std::string> samples;
       samples.reserve(rows.size());
@@ -538,18 +543,24 @@ inline void downsample_series(SeriesData& series, std::size_t max_points) {
   series.value = std::move(value);
 }
 
-inline LoadOutcome load_csv_series(const std::filesystem::path& path, const SeriesRequest& request) {
-  const auto catalog = load_csv_catalog(path);
-  const auto& table = catalog.tables.at(0);
-  const auto rows = read_csv_rows(path);
+inline LoadOutcome load_csv_series_streaming(const std::filesystem::path& path, const std::vector<ColumnInfo>& columns, const SeriesRequest& request) {
+  std::ifstream input(path);
+  if (!input.is_open()) {
+    return LoadOutcome{false, {}, "Failed to open CSV file: " + path.string()};
+  }
+
+  std::string header_line;
+  if (!std::getline(input, header_line)) {
+    return LoadOutcome{false, {}, "CSV file has no header row"};
+  }
 
   std::optional<std::size_t> time_index;
   if (!request.time_column.empty()) {
-    time_index = column_index_by_name(table.columns, request.time_column);
-  } else if (const auto inferred = infer_time_column(table.columns); inferred.has_value()) {
-    time_index = column_index_by_name(table.columns, inferred.value());
+    time_index = column_index_by_name(columns, request.time_column);
+  } else if (const auto inferred = infer_time_column(columns); inferred.has_value()) {
+    time_index = column_index_by_name(columns, inferred.value());
   }
-  const auto value_index = column_index_by_name(table.columns, request.value_column);
+  const auto value_index = column_index_by_name(columns, request.value_column);
 
   if (!time_index.has_value()) {
     return LoadOutcome{false, {}, "Time column not found: " + request.time_column};
@@ -559,13 +570,20 @@ inline LoadOutcome load_csv_series(const std::filesystem::path& path, const Seri
   }
 
   SeriesData series;
-  series.source_name = catalog.source_name;
-  series.table_name = table.name;
-  series.time_column = table.columns[*time_index].name;
-  series.value_column = table.columns[*value_index].name;
-  series.name = catalog.source_name + "." + series.value_column;
+  if (!columns.empty()) {
+    series.source_name = path.stem().string();
+    series.table_name = path.stem().string();
+    series.time_column = columns[*time_index].name;
+    series.value_column = columns[*value_index].name;
+    series.name = series.source_name + "." + series.value_column;
+  }
 
-  for (const auto& row : rows) {
+  std::string line;
+  while (std::getline(input, line)) {
+    if (trim(line).empty()) {
+      continue;
+    }
+    const auto row = split_csv_line(line);
     if (*time_index >= row.size() || *value_index >= row.size()) {
       continue;
     }
@@ -585,7 +603,92 @@ inline LoadOutcome load_csv_series(const std::filesystem::path& path, const Seri
   return LoadOutcome{true, std::move(series), {}};
 }
 
-inline std::vector<std::vector<std::string>> read_sqlite_rows(sqlite3* db, const std::string& table_name, const std::vector<ColumnInfo>& columns) {
+inline LoadOutcome load_sqlite_series_targeted(const std::filesystem::path& path, const std::string& table_name, const std::vector<ColumnInfo>& columns, const SeriesRequest& request) {
+  sqlite3* db = nullptr;
+  if (sqlite3_open_v2(path.string().c_str(), &db, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK) {
+    const std::string message = db != nullptr ? sqlite3_errmsg(db) : "unknown SQLite error";
+    if (db != nullptr) {
+      sqlite3_close(db);
+    }
+    return LoadOutcome{false, {}, "Failed to open SQLite file: " + message};
+  }
+
+  struct DbCloser {
+    sqlite3* db{nullptr};
+    ~DbCloser() {
+      if (db != nullptr) {
+        sqlite3_close(db);
+      }
+    }
+  } closer{db};
+
+  std::optional<std::size_t> time_index;
+  if (!request.time_column.empty()) {
+    time_index = column_index_by_name(columns, request.time_column);
+  } else if (const auto inferred = infer_time_column(columns); inferred.has_value()) {
+    time_index = column_index_by_name(columns, inferred.value());
+  }
+  const auto value_index = column_index_by_name(columns, request.value_column);
+
+  if (!time_index.has_value()) {
+    return LoadOutcome{false, {}, "Time column not found: " + request.time_column};
+  }
+  if (!value_index.has_value()) {
+    return LoadOutcome{false, {}, "Value column not found: " + request.value_column};
+  }
+
+  // Build a targeted SELECT with only the needed columns
+  std::string sql = "SELECT ";
+  sql += sqlite_quote_identifier(columns[*time_index].name);
+  sql += ", ";
+  sql += sqlite_quote_identifier(columns[*value_index].name);
+  sql += " FROM ";
+  sql += sqlite_quote_identifier(table_name);
+  sql += ";";
+
+  sqlite3_stmt* stmt = nullptr;
+  if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+    return LoadOutcome{false, {}, "Failed to query SQLite: " + std::string(sqlite3_errmsg(db))};
+  }
+
+  SeriesData series;
+  series.source_name = path.stem().string();
+  series.table_name = table_name;
+  series.time_column = columns[*time_index].name;
+  series.value_column = columns[*value_index].name;
+  series.name = series.source_name + "." + table_name + "." + series.value_column;
+
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+    const unsigned char* time_text = sqlite3_column_text(stmt, 0);
+    const unsigned char* value_text = sqlite3_column_text(stmt, 1);
+    if (time_text == nullptr || value_text == nullptr) {
+      continue;
+    }
+    const auto time_value = parse_scalar(reinterpret_cast<const char*>(time_text));
+    double numeric_value = 0.0;
+    if (!time_value.has_value() || !parse_double(reinterpret_cast<const char*>(value_text), numeric_value)) {
+      continue;
+    }
+    series.time.push_back(*time_value);
+    series.value.push_back(numeric_value);
+  }
+
+  sqlite3_finalize(stmt);
+
+  if (request.max_points.has_value()) {
+    downsample_series(series, *request.max_points);
+  }
+
+  return LoadOutcome{true, std::move(series), {}};
+}
+
+inline LoadOutcome load_csv_series(const std::filesystem::path& path, const SeriesRequest& request) {
+  const auto catalog = load_csv_catalog(path);
+  const auto& table = catalog.tables.at(0);
+  return load_csv_series_streaming(path, table.columns, request);
+}
+
+inline std::vector<std::vector<std::string>> read_sqlite_rows(sqlite3* db, const std::string& table_name, const std::vector<ColumnInfo>& columns, std::optional<std::size_t> limit) {
   std::vector<std::vector<std::string>> rows;
   if (columns.empty()) {
     return rows;
@@ -615,6 +718,9 @@ inline std::vector<std::vector<std::string>> read_sqlite_rows(sqlite3* db, const
       row.emplace_back(text == nullptr ? std::string{} : reinterpret_cast<const char*>(text));
     }
     rows.push_back(std::move(row));
+    if (limit.has_value() && rows.size() >= *limit) {
+      break;
+    }
   }
 
   sqlite3_finalize(stmt);
@@ -632,49 +738,9 @@ inline LoadOutcome load_sqlite_series(const std::filesystem::path& path, const s
   }
 
   const auto columns = fetch_sqlite_columns(db, table_name);
-  const auto rows = read_sqlite_rows(db, table_name, columns);
   sqlite3_close(db);
 
-  std::optional<std::size_t> time_index;
-  if (!request.time_column.empty()) {
-    time_index = column_index_by_name(columns, request.time_column);
-  } else if (const auto inferred = infer_time_column(columns); inferred.has_value()) {
-    time_index = column_index_by_name(columns, inferred.value());
-  }
-  const auto value_index = column_index_by_name(columns, request.value_column);
-
-  if (!time_index.has_value()) {
-    return LoadOutcome{false, {}, "Time column not found: " + request.time_column};
-  }
-  if (!value_index.has_value()) {
-    return LoadOutcome{false, {}, "Value column not found: " + request.value_column};
-  }
-
-  SeriesData series;
-  series.source_name = path.stem().string();
-  series.table_name = table_name;
-  series.time_column = columns[*time_index].name;
-  series.value_column = columns[*value_index].name;
-  series.name = series.source_name + "." + table_name + "." + series.value_column;
-
-  for (const auto& row : rows) {
-    if (*time_index >= row.size() || *value_index >= row.size()) {
-      continue;
-    }
-    const auto time_value = parse_scalar(row[*time_index]);
-    double numeric_value = 0.0;
-    if (!time_value.has_value() || !parse_double(row[*value_index], numeric_value)) {
-      continue;
-    }
-    series.time.push_back(*time_value);
-    series.value.push_back(numeric_value);
-  }
-
-  if (request.max_points.has_value()) {
-    downsample_series(series, *request.max_points);
-  }
-
-  return LoadOutcome{true, std::move(series), {}};
+  return load_sqlite_series_targeted(path, table_name, columns, request);
 }
 
 inline std::vector<std::string> dotted_parts(std::string_view name) {

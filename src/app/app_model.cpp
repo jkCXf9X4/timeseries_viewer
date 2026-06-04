@@ -146,31 +146,30 @@ std::optional<tsv::SeriesData> load_raw_series(
   }
   try {
     if (source.catalog.kind == tsv::SourceKind::Csv) {
-      const auto rows = tsv::read_csv_rows(source.catalog.path);
-      return load_series_from_rows(source, *table, rows, table_name, time_column_override, value_column, error, time_column_out, max_points);
+      tsv::SeriesRequest request;
+      request.time_column = time_column_override.value_or(default_time_column(*table));
+      request.value_column = value_column;
+      request.max_points = max_points;
+      auto outcome = tsv::load_csv_series_streaming(source.catalog.path, table->columns, request);
+      if (!outcome.ok) {
+        error = outcome.error;
+        return std::nullopt;
+      }
+      time_column_out = outcome.series.time_column;
+      return outcome.series;
     }
 
-    sqlite3* db = nullptr;
-    if (sqlite3_open_v2(source.catalog.path.string().c_str(), &db, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK) {
-      const std::string message = db != nullptr ? sqlite3_errmsg(db) : "unknown SQLite error";
-      if (db != nullptr) {
-        sqlite3_close(db);
-      }
-      error = "Failed to open SQLite file: " + message;
+    tsv::SeriesRequest request;
+    request.time_column = time_column_override.value_or(default_time_column(*table));
+    request.value_column = value_column;
+    request.max_points = max_points;
+    auto outcome = tsv::load_sqlite_series_targeted(source.catalog.path, table->name, table->columns, request);
+    if (!outcome.ok) {
+      error = outcome.error;
       return std::nullopt;
     }
-
-    struct DbCloser {
-      sqlite3* db{nullptr};
-      ~DbCloser() {
-        if (db != nullptr) {
-          sqlite3_close(db);
-        }
-      }
-    } closer{db};
-
-    const auto rows = tsv::read_sqlite_rows(db, table->name, table->columns);
-    return load_series_from_rows(source, *table, rows, table_name, time_column_override, value_column, error, time_column_out, max_points);
+    time_column_out = outcome.series.time_column;
+    return outcome.series;
   } catch (const std::exception& ex) {
     error = ex.what();
     return std::nullopt;
@@ -518,6 +517,133 @@ void rebuild_cache(AppState& app) {
         } catch (const std::exception& ex) {
           app.series_errors[series_cfg.name] = ex.what();
         }
+      }
+    }
+  }
+}
+
+void rebuild_cache_metadata(AppState& app) {
+  ensure_workspace_defaults(app);
+  app.series_cache.clear();
+  app.series_errors.clear();
+  app.cache_stale = false;
+}
+
+namespace {
+tsv::SeriesRegistry make_registry_from_raw_cache(AppState& app) {
+  tsv::SeriesRegistry registry;
+  for (const auto& [name, series] : app.series_cache) {
+    registry.set(series);
+  }
+  return registry;
+}
+}
+
+void ensure_tab_data(AppState& app, std::size_t window_index, std::size_t tab_index) {
+  if (window_index >= app.workspace.windows.size()) {
+    return;
+  }
+  auto& window = app.workspace.windows[window_index];
+  if (tab_index >= window.tabs.size()) {
+    return;
+  }
+  auto& tab = window.tabs[tab_index];
+
+  for (auto& series_cfg : tab.series) {
+    if (series_cfg.derived) {
+      continue;
+    }
+
+    if (app.series_cache.contains(series_cfg.name) && !app.series_errors.contains(series_cfg.name)) {
+      continue;
+    }
+
+    const auto source_path = series_cfg.source_path.has_value() ? fs::path(*series_cfg.source_path) : fs::path{};
+    const OpenSource* source = nullptr;
+    if (!source_path.empty()) {
+      source = find_source_by_path(app, source_path);
+    }
+    if (source == nullptr && series_cfg.source_alias.has_value()) {
+      source = find_source_by_alias(app, *series_cfg.source_alias);
+    }
+    if (source == nullptr) {
+      app.series_errors[series_cfg.name] = "Source missing";
+      continue;
+    }
+    if (!series_cfg.value_column.has_value()) {
+      app.series_errors[series_cfg.name] = "Value column missing";
+      continue;
+    }
+
+    const auto table = find_table(source->catalog, series_cfg.table_name);
+    if (!table.has_value()) {
+      app.series_errors[series_cfg.name] = "Table not found";
+      continue;
+    }
+
+    const auto resolved_time_column = series_cfg.time_column.has_value()
+      ? *series_cfg.time_column
+      : default_time_column(*table);
+
+    SeriesBindingKey key{source->catalog.path, series_cfg.table_name, resolved_time_column, *series_cfg.value_column};
+    auto& entry = app.raw_series_cache[key];
+    const auto current_stamp = source->last_write_time;
+    const auto budget = app.workspace.point_budget == 0 ? std::optional<std::size_t>{} : std::optional<std::size_t>{app.workspace.point_budget};
+    const bool cache_valid = entry.source_stamp.has_value()
+      && current_stamp.has_value()
+      && *entry.source_stamp == *current_stamp
+      && entry.max_points == budget;
+
+    if (!cache_valid) {
+      std::string error;
+      std::string time_column;
+      const auto series = load_raw_series(*source, series_cfg.table_name, resolved_time_column, *series_cfg.value_column, error, time_column, budget);
+      if (!series.has_value()) {
+        app.series_errors[series_cfg.name] = error;
+        continue;
+      }
+      entry.source_stamp = current_stamp;
+      entry.max_points = budget;
+      entry.series = *series;
+    }
+
+    if (series_cfg.name.empty()) {
+      series_cfg.name = entry.series.name;
+    }
+    if (!series_cfg.source_alias.has_value()) {
+      series_cfg.source_alias = source->alias;
+    }
+    if (!series_cfg.source_path.has_value()) {
+      series_cfg.source_path = source->catalog.path.string();
+    }
+    series_cfg.time_column = entry.series.time_column;
+
+    auto loaded = entry.series;
+    loaded.name = series_cfg.name;
+    loaded.source_name = source->alias;
+    app.series_cache[loaded.name] = loaded;
+  }
+
+  // Build a full registry from all cached raw series, then re-evaluate this tab's derived series
+  if (std::any_of(tab.series.begin(), tab.series.end(), [](const auto& s) { return s.derived; })) {
+    tsv::SeriesRegistry registry;
+    for (const auto& [name, series] : app.series_cache) {
+      registry.set(series);
+    }
+    for (auto& series_cfg : tab.series) {
+      if (!series_cfg.derived || (!app.series_errors.contains(series_cfg.name) && app.series_cache.contains(series_cfg.name))) {
+        continue;
+      }
+      if (series_cfg.name.empty()) {
+        series_cfg.name = series_cfg.expression.empty() ? "derived" : series_cfg.expression;
+      }
+      try {
+        auto series = tsv::evaluate_expression(series_cfg.expression, registry);
+        series.name = series_cfg.name;
+        app.series_cache[series.name] = std::move(series);
+        registry.set(app.series_cache.at(series_cfg.name));
+      } catch (const std::exception& ex) {
+        app.series_errors[series_cfg.name] = ex.what();
       }
     }
   }

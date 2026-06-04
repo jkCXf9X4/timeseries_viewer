@@ -58,6 +58,7 @@ struct AppState {
   std::unordered_map<SeriesBindingKey, RawCacheEntry, SeriesBindingKeyHash> raw_series_cache;
   std::string status{"Ready"};
   bool live_mode{false};
+  bool cache_stale{true};
   std::chrono::steady_clock::time_point last_poll{std::chrono::steady_clock::now()};
   fs::path project_path;
   int active_window{0};
@@ -132,5 +133,8 @@ void save_project_file(AppState& app, const fs::path& path);
 void load_project_file(AppState& app, const fs::path& path);
 void reload_sources(AppState& app);
 void poll_live_reload(AppState& app);
+
+void rebuild_cache_metadata(AppState& app);
+void ensure_tab_data(AppState& app, std::size_t window_index, std::size_t tab_index);
 
 } // namespace tsv::app
