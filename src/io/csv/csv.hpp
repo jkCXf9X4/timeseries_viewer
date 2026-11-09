@@ -88,7 +88,18 @@ inline LoadOutcome load_csv_series_streaming(const std::filesystem::path& path, 
   const auto value_index = column_index_by_name(columns, request.value_column);
 
   if (!time_index.has_value()) {
-    return LoadOutcome{false, {}, "Time column not found: " + request.time_column};
+    if (!request.time_column.empty()) {
+      return LoadOutcome{false, {}, "Time column not found: " + request.time_column};
+    }
+    const auto all_empty = std::none_of(columns.begin(), columns.end(), [](const ColumnInfo& c) { return c.time_candidate; });
+    if (all_empty) {
+      return LoadOutcome{
+        false, {},
+        "No time column found: the file has a header but no data rows with a "
+        "numeric or date-time value, so no column could be used as the time axis"
+      };
+    }
+    return LoadOutcome{false, {}, "No time column found in: " + path.string()};
   }
   if (!value_index.has_value()) {
     return LoadOutcome{false, {}, "Value column not found: " + request.value_column};

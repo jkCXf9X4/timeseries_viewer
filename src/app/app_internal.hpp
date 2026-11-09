@@ -69,7 +69,13 @@ inline std::optional<tsv::SeriesData> load_series_from_rows(
   const auto time_index = tsv::column_index_by_name(table.columns, resolved_time_column);
   const auto value_index = tsv::column_index_by_name(table.columns, value_column);
   if (!time_index.has_value()) {
-    error = "Time column not found: " + resolved_time_column;
+    if (!resolved_time_column.empty()) {
+      error = "Time column not found: " + resolved_time_column;
+    } else {
+      error =
+        "No time column found: the source has a header but no data rows with a "
+        "numeric or date-time value, so no column could be used as the time axis";
+    }
     return std::nullopt;
   }
   if (!value_index.has_value()) {
