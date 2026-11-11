@@ -21,4 +21,4 @@
 
 Security expectations are part of the operational constraints in:
 
-- [05 operation](../product-breakdown/05-operation/layer.md)
+- [05 operation](breakdown/05-operation/__INDEX__.md)

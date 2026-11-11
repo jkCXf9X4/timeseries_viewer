@@ -43,5 +43,5 @@ Project files are JSON documents that store:
 
 The durable data-model rules are in:
 
-- [01 product](../product-breakdown/01-product/layer.md)
-- [03 implementation](../product-breakdown/03-implementation/layer.md)
+- [01 product](breakdown/01-product/__INDEX__.md)
+- [03 implementation](breakdown/03-implementation/__INDEX__.md)

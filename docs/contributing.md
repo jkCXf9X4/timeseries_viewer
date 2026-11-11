@@ -26,7 +26,7 @@
 
 ## Adding Features
 
-- Put stable product decisions in `product-breakdown/`.
+- Put stable product decisions in `docs/breakdown/`.
 - Put runnable commands and procedures in `docs/`.
 - Add or extend tests alongside every behavior change.
 - Keep source-specific logic behind the core layer instead of leaking it into the UI.
@@ -35,5 +35,5 @@
 
 Implementation boundaries are captured in:
 
-- [03 implementation](../product-breakdown/03-implementation/layer.md)
-- [04 verification](../product-breakdown/04-verification/layer.md)
+- [03 implementation](breakdown/03-implementation/__INDEX__.md)
+- [04 verification](breakdown/04-verification/__INDEX__.md)

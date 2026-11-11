@@ -48,5 +48,5 @@ ctest --test-dir build --output-on-failure
 
 Build-time decisions and implementation structure are recorded in:
 
-- [03 implementation](../product-breakdown/03-implementation/layer.md)
-- [02 architecture](../product-breakdown/02-architecture/layer.md)
+- [03 implementation](breakdown/03-implementation/__INDEX__.md)
+- [02 architecture](breakdown/02-architecture/__INDEX__.md)

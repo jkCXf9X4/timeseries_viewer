@@ -286,4 +286,4 @@ Manual acceptance scenarios:
 
 ## Traceability
 
-- [Product breakdown](../product-breakdown/README.md)
+- [Product breakdown](breakdown/README.md)

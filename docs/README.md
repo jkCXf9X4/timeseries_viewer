@@ -19,6 +19,6 @@ This directory contains runnable guidance and operator-facing notes.
 
 The durable product source lives in:
 
-- [product breakdown](../product-breakdown/README.md)
+- [product breakdown](breakdown/README.md)
 
 Use that tree for intent, scope, architecture, implementation mapping, verification expectations, operation constraints, and evolution. Use this directory for concrete commands, walkthroughs, and support procedures.

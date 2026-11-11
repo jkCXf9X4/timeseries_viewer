@@ -15,7 +15,7 @@ It is built for quick inspection:
 ## Start here
 
 - [Documentation index](docs/README.md)
-- [Product breakdown](product-breakdown/README.md)
+- [Product breakdown](docs/breakdown/README.md)
 
 ## What to expect
 

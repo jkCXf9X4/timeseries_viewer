@@ -60,5 +60,5 @@
 
 The supported workflows and scope are defined in:
 
-- [01 product](../product-breakdown/01-product/layer.md)
-- [00 intent](../product-breakdown/00-intent/layer.md)
+- [01 product](breakdown/01-product/__INDEX__.md)
+- [00 intent](breakdown/00-intent/__INDEX__.md)

@@ -46,4 +46,4 @@ The `GuiHarness` test support class provides a simulated UI backend for testing 
 
 Acceptance behavior is defined in:
 
-- [04 verification](../product-breakdown/04-verification/layer.md)
+- [04 verification](breakdown/04-verification/__INDEX__.md)

@@ -37,5 +37,5 @@ The application currently has a small fixed configuration surface:
 
 The stable product decisions that shape configuration are in:
 
-- [02 architecture](../product-breakdown/02-architecture/layer.md)
-- [05 operation](../product-breakdown/05-operation/layer.md)
+- [02 architecture](breakdown/02-architecture/__INDEX__.md)
+- [05 operation](breakdown/05-operation/__INDEX__.md)
